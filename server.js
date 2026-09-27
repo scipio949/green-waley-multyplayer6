@@ -10,30 +10,54 @@ const players = new Map();
 let nextId = 1;
 
 const server = http.createServer((req, res) => {
-  if (req.url === "/" || req.url === "/Green_Valley_Gesamtversion.html") {
+  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+
+  // Test-Adresse
+  if (url.pathname === "/health") {
+    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Green Valley Server läuft");
+    return;
+  }
+
+  // Startseite + Spiel
+  if (
+    url.pathname === "/" ||
+    url.pathname === "" ||
+    url.pathname === "/index.html" ||
+    url.pathname === "/Green_Valley_Gesamtversion.html"
+  ) {
     fs.readFile(GAME_FILE, (err, data) => {
       if (err) {
-        res.writeHead(500);
-        res.end("Spiel konnte nicht geladen werden.");
+        console.error("Spiel-Datei konnte nicht geladen werden:", err);
+        res.writeHead(500, {
+          "Content-Type": "text/plain; charset=utf-8"
+        });
+        res.end("Spiel-Datei nicht gefunden.");
         return;
       }
 
       res.writeHead(200, {
-        "Content-Type": "text/html; charset=utf-8"
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-cache"
       });
+
       res.end(data);
     });
+
     return;
   }
 
-  res.writeHead(404);
-  res.end("Not found");
+  res.writeHead(404, {
+    "Content-Type": "text/plain; charset=utf-8"
+  });
+
+  res.end("Not Found");
 });
 
 const wss = new WebSocket.Server({ server });
 
 function broadcastPlayers() {
-  const data = [...players.values()].map(player => ({
+  const list = [...players.values()].map(player => ({
     id: player.id,
     x: player.x,
     y: player.y,
@@ -42,7 +66,7 @@ function broadcastPlayers() {
 
   const message = JSON.stringify({
     type: "players",
-    players: data
+    players: list
   });
 
   for (const player of players.values()) {
@@ -53,10 +77,13 @@ function broadcastPlayers() {
 }
 
 wss.on("connection", ws => {
+  console.log("Neuer Spieler verbunden");
+
   if (players.size >= 2) {
     ws.send(JSON.stringify({
       type: "full"
     }));
+
     ws.close();
     return;
   }
@@ -84,10 +111,15 @@ wss.on("connection", ws => {
     try {
       const message = JSON.parse(raw.toString());
 
-      if (message.type !== "state") return;
+      if (message.type !== "state") {
+        return;
+      }
 
       const current = players.get(id);
-      if (!current) return;
+
+      if (!current) {
+        return;
+      }
 
       if (Number.isFinite(message.x)) {
         current.x = Math.max(0, Math.min(7200, message.x));
@@ -101,21 +133,23 @@ wss.on("connection", ws => {
 
       broadcastPlayers();
     } catch (error) {
-      // Ungültige Nachricht ignorieren
+      console.error("Ungültige Nachricht:", error);
     }
   });
 
   ws.on("close", () => {
+    console.log("Spieler getrennt:", id);
     players.delete(id);
     broadcastPlayers();
   });
 
-  ws.on("error", () => {
+  ws.on("error", error => {
+    console.error("WebSocket-Fehler:", error);
     players.delete(id);
     broadcastPlayers();
   });
 });
 
 server.listen(PORT, () => {
-  console.log(`Green Valley Multiplayer läuft auf Port ${PORT}`);
+  console.log(`Green Valley Server läuft auf Port ${PORT}`);
 });

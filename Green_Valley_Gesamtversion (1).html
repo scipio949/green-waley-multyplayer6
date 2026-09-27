@@ -1,0 +1,1909 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Green Valley – NPC & Quests</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;background:#111;font-family:Arial,sans-serif}
+canvas{display:block;width:100vw;height:100vh}
+#hud{
+ position:fixed;top:12px;left:12px;z-index:10;color:white;
+ background:rgba(0,0,0,.68);padding:12px 16px;border-radius:12px;
+ line-height:1.55;max-width:360px
+}
+#questHud{
+ position:fixed;top:12px;right:12px;z-index:10;color:white;
+ background:rgba(0,0,0,.68);padding:12px 16px;border-radius:12px;
+ width:min(360px,calc(100vw - 24px));display:none
+}
+#shop,#dialog{
+ display:none;position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.65);
+ align-items:center;justify-content:center
+}
+.box{
+ width:min(500px,90vw);background:#f4e8ce;color:#222;border-radius:18px;
+ padding:22px;box-shadow:0 10px 40px #000
+}
+.box h2{margin-top:0}
+.shopMoney{font-weight:bold;margin-bottom:15px}
+.item{
+ display:flex;align-items:center;justify-content:space-between;
+ background:white;margin:8px 0;padding:12px;border-radius:10px
+}
+button{
+ border:0;border-radius:8px;padding:9px 13px;background:#3b7ddd;
+ color:white;cursor:pointer;font-weight:bold
+}
+button:disabled{background:#999;cursor:not-allowed}
+.close{
+ width:100%;margin-top:15px;padding:11px;background:#444
+}
+#message{margin-top:10px;min-height:20px;font-weight:bold}
+.dialogText{font-size:18px;line-height:1.5;min-height:90px}
+.reward{font-weight:bold;color:#16733b}
+
+#minimap{position:fixed;right:12px;bottom:12px;z-index:12;width:230px;background:rgba(0,0,0,.78);padding:8px;border-radius:14px;color:#fff;box-shadow:0 8px 25px rgba(0,0,0,.35)}
+#minimapCanvas{display:block;width:214px;height:142px;border-radius:9px;background:#78b85a}
+#mapLabel{text-align:center;font-weight:bold;font-size:13px;margin-top:5px}
+#lakeHint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:11;background:rgba(0,45,70,.88);color:#fff;padding:10px 16px;border-radius:12px;font-weight:bold;display:none;box-shadow:0 6px 20px rgba(0,0,0,.3)}
+#realEstate{display:none;position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.72);align-items:center;justify-content:center}
+.houseCard{display:flex;align-items:center;justify-content:space-between;gap:15px;background:white;margin:10px 0;padding:13px;border-radius:12px}
+.houseCard .desc{flex:1}
+.houseCard b{display:block;font-size:17px;margin-bottom:3px}
+.houseCard small{color:#666}
+.houseOwned{font-weight:bold;color:#16733b}
+</style>
+<style>
+#axeSwing.swing{animation:axeHit .22s ease-in-out;}
+@keyframes axeHit{0%{transform:translateX(-50%) rotate(-35deg)}55%{transform:translateX(-50%) rotate(28deg)}100%{transform:translateX(-50%) rotate(-35deg)}}
+</style>
+</head>
+<body>
+
+<div id="startScreen" style="position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:linear-gradient(rgba(18,45,27,.78),rgba(8,20,12,.9));font-family:Arial,sans-serif;">
+  <div style="text-align:center;color:white;padding:38px 42px;border-radius:24px;background:rgba(20,35,25,.92);border:3px solid #79a64a;box-shadow:0 18px 60px rgba(0,0,0,.5);max-width:520px;width:calc(100% - 40px);">
+    <div style="font-size:64px;margin-bottom:8px;">🌲🏡🌲</div>
+    <h1 style="font-size:42px;margin:0 0 8px;">Green Valley</h1>
+    <p style="font-size:18px;margin:0 0 24px;color:#dcebd6;">Dein Abenteuer beginnt!</p>
+    <button id="startGameButton" type="button" style="font-size:24px;font-weight:bold;padding:14px 42px;border:0;border-radius:14px;background:#79a64a;color:white;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.3);">▶ START</button>
+  </div>
+</div>
+
+
+<div id="multiplayerStatus" style="position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:15;color:white;background:rgba(0,0,0,.68);padding:8px 14px;border-radius:10px;font-weight:bold">🌐 Offline</div>
+
+<div id="hud"><div>🌍 Große Welt: 3600 × 2400</div>
+ 💎 Kristalle: <span id="crystals">600</span><br>
+ 🎒 Inventar: <span id="inventory">leer</span><br>
+ <small>WASD / Pfeiltasten bewegen · E = Interagieren</small><br><span id="dayNightHud">☀️ Tag · noch 1:00</span>
+</div>
+
+<div id="questHud"></div>
+
+<canvas id="game" width="960" height="600"></canvas>
+
+<div id="minimap">
+  <canvas id="minimapCanvas" width="214" height="142"></canvas>
+  <div id="mapLabel">🗺️ Minimap · 🔵 Du · 🟦 See · 🔴 Fischer</div>
+</div>
+<div id="lakeHint"></div>
+<div id="estateHint" style="position:fixed;left:12px;bottom:12px;z-index:12;background:rgba(70,42,15,.9);color:#fff;padding:9px 13px;border-radius:11px;font-weight:bold;box-shadow:0 6px 18px rgba(0,0,0,.3)">🏠 Immobilien: 🏠-Marker · E</div>
+<div id="carHint" style="position:fixed;left:12px;bottom:58px;z-index:12;background:rgba(35,65,90,.92);color:#fff;padding:9px 13px;border-radius:11px;font-weight:bold;box-shadow:0 6px 18px rgba(0,0,0,.3)">🚗 Autohändler: 🚗-Marker · E</div>
+
+<div id="realEstate">
+ <div class="box">
+  <h2>🏠 Immobilienbüro</h2>
+  <div class="shopMoney">💎 Kristalle: <span id="estateCrystals">600</span></div>
+  <div class="houseCard">
+   <div class="desc"><b>🏡 Kleines Haus — 90 💎</b><small>Gemütliches eigenes Zuhause.</small></div>
+   <button onclick="buyHouse('klein')">Kaufen</button>
+  </div>
+  <div class="houseCard">
+   <div class="desc"><b>🏠 Großes Haus — 100 💎</b><small>Mehr Platz und ein größeres Grundstück.</small></div>
+   <button onclick="buyHouse('gross')">Kaufen</button>
+  </div>
+  <div class="houseCard">
+   <div class="desc"><b>🏰 Villa — 150 💎</b><small>Das größte Haus mit viel Platz.</small></div>
+   <button onclick="buyHouse('villa')">Kaufen</button>
+  </div>
+  <div id="estateMessage"></div>
+  <button onclick="sellHouse()" style="margin-top:10px">💰 Eigenes Haus für 50% verkaufen</button>
+  <button class="close" onclick="closeRealEstate()">Schließen</button>
+ </div>
+</div>
+
+<div id="carDealer" style="display:none;position:fixed;inset:0;z-index:45;align-items:center;justify-content:center;background:rgba(0,0,0,.72);">
+ <div class="box" style="width:min(560px,92vw);">
+  <h2>🚗 Autohändler</h2>
+  <div class="shopMoney">💎 Kristalle: <span id="carDealerCrystals">600</span></div>
+  <div class="houseCard"><div class="desc"><b>🚗 Dorf-Flitzer — 60 💎</b><small>Geschwindigkeit: 2.8 · ruhig und leicht zu fahren.</small></div><button onclick="buyCar('flitzer')">Kaufen</button></div>
+  <div class="houseCard"><div class="desc"><b>🚙 Wald-Cruiser — 90 💎</b><small>Geschwindigkeit: 3.2 · etwas schneller, aber noch gemütlich.</small></div><button onclick="buyCar('cruiser')">Kaufen</button></div>
+  <div class="houseCard"><div class="desc"><b>🏎️ Tal-Sportler — 120 💎</b><small>Geschwindigkeit: 3.6 · das schnellste Auto, bewusst nicht zu schnell.</small></div><button onclick="buyCar('sportler')">Kaufen</button></div>
+  <div id="carDealerMessage"></div>
+  <button onclick="sellCar()" style="margin-top:10px">💰 Eigenes Auto für 50% verkaufen</button>
+  <button class="close" onclick="closeCarDealer()">Schließen</button>
+ </div>
+</div>
+
+<div id="shop">
+ <div class="box">
+  <h2>🏪 Dorfladen</h2>
+  <div class="shopMoney">💎 Kristalle: <span id="shopCrystals">600</span></div>
+  <div class="item"><span>💧 Wasser — 3 💎</span><button onclick="buyItem('Wasser',3)">Kaufen</button></div>
+  <div class="item"><span>🍎 Apfel — 5 💎</span><button onclick="buyItem('Apfel',5)">Kaufen</button></div>
+  <div class="item"><span>🍞 Brot — 7 💎</span><button onclick="buyItem('Brot',7)">Kaufen</button></div>
+  <div class="item"><span>❤️ Heiltrank — 10 💎</span><button onclick="buyItem('Heiltrank',10)">Kaufen</button></div>
+  <div class="item"><span>⚡ Energie-Trank — 15 💎</span><button onclick="buyItem('Energie-Trank',15)">Kaufen</button></div>
+  <div id="message"></div>
+  <button class="close" onclick="closeShop()">Schließen</button>
+ </div>
+</div>
+
+<div id="dialog">
+ <div class="box">
+  <h2 id="dialogTitle">NPC</h2>
+  <div id="dialogText" class="dialogText"></div>
+  <button id="dialogAction" onclick="dialogAction()">Weiter</button>
+  <button class="close" onclick="closeDialog()">Schließen</button>
+ </div>
+</div>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+const WORLD_W=3600, WORLD_H=2400;
+
+// Stadt-Dimension: erreichbar über die Straße am rechten Kartenrand.
+const CITY_W=7200, CITY_H=4800;
+let inCity=false;
+const cityPlayer={x:45,y:780};
+const cityRoads=[
+ {x:0,y:735,w:CITY_W,h:90},
+ {x:0,y:1700,w:CITY_W,h:90},
+ {x:0,y:2650,w:CITY_W,h:90},
+ {x:0,y:3600,w:CITY_W,h:90},
+ {x:0,y:4550,w:CITY_W,h:90},
+ {x:655,y:300,w:90,h:CITY_H-300},
+ {x:1855,y:300,w:90,h:CITY_H-300},
+ {x:3055,y:300,w:90,h:CITY_H-300},
+ {x:4255,y:300,w:90,h:CITY_H-300},
+ {x:5455,y:300,w:90,h:CITY_H-300},
+ {x:6655,y:300,w:90,h:CITY_H-300}
+];
+const cityBuildings=[
+ {x:180,y:380,w:260,h:180,n:"Wohn-Hochhaus",floors:12},
+ {x:850,y:390,w:300,h:190,n:"City Tower",floors:13},
+ {x:2050,y:390,w:300,h:190,n:"Hotel Tower",floors:13},
+ {x:3250,y:380,w:350,h:190,n:"Bahnhof Tower",floors:12},
+ {x:4450,y:390,w:300,h:190,n:"Wohn-Tower",floors:12},
+ {x:5650,y:380,w:350,h:190,n:"Business Tower",floors:13},
+ {x:6250,y:900,w:300,h:150,n:"Werkstatt",floors:5},
+ {x:180,y:1000,w:300,h:150,n:"Geschäftshaus",floors:5},
+ {x:850,y:1000,w:330,h:150,n:"Bürohaus",floors:6},
+ {x:2050,y:1000,w:300,h:150,n:"Rathaus",floors:5},
+ {x:3250,y:1000,w:380,h:170,n:"Bürohochhaus",floors:7},
+ {x:4450,y:1000,w:300,h:150,n:"Hotel",floors:6},
+ {x:5650,y:1000,w:330,h:150,n:"Kaufhaus",floors:5},
+ {x:180,y:1950,w:300,h:150,n:"Wohnhaus",floors:6},
+ {x:850,y:1950,w:300,h:150,n:"City Plaza",floors:7},
+ {x:2050,y:1950,w:350,h:170,n:"Finanzzentrum",floors:9},
+ {x:3250,y:1950,w:300,h:150,n:"Hotel Nord",floors:6},
+ {x:4450,y:1950,w:380,h:170,n:"Tower West",floors:9},
+ {x:5650,y:1950,w:300,h:150,n:"Wohnblock",floors:6},
+ {x:180,y:2900,w:330,h:150,n:"Wohnblock Süd",floors:6},
+ {x:850,y:2900,w:300,h:150,n:"Büro Süd",floors:7},
+ {x:2050,y:2900,w:300,h:150,n:"Markthalle",floors:5},
+ {x:3250,y:2900,w:350,h:170,n:"City Tower Süd",floors:10},
+ {x:4450,y:2900,w:300,h:150,n:"Wohn-Tower Süd",floors:8},
+ {x:5650,y:2900,w:380,h:170,n:"Industrie Tower",floors:7},
+ {x:180,y:3850,w:300,h:150,n:"Wohnhaus Ost",floors:6},
+ {x:850,y:3850,w:330,h:150,n:"Bürohaus Ost",floors:7},
+ {x:2050,y:3850,w:300,h:150,n:"Klinik",floors:6},
+ {x:3250,y:3850,w:380,h:170,n:"Hochhaus Süd",floors:10},
+ {x:4450,y:3850,w:300,h:150,n:"Wohnblock Ost",floors:6},
+ {x:5650,y:3850,w:350,h:170,n:"City Tower Ost",floors:9}
+];
+const cityParks=[
+ {x:510,y:390,w:280,h:230,n:"Park Nordwest"},
+ {x:1220,y:390,w:420,h:230,n:"Park Nord"},
+ {x:2450,y:390,w:500,h:230,n:"Park Nordost"},
+ {x:3650,y:390,w:500,h:230,n:"Park Zentrum"},
+ {x:4850,y:390,w:500,h:230,n:"Park Nordost II"},
+ {x:6050,y:390,w:500,h:230,n:"Park Nordost III"},
+ {x:510,y:1950,w:280,h:230,n:"Park West"},
+ {x:1220,y:1950,w:600,h:230,n:"Park Mitte West"},
+ {x:2450,y:1950,w:500,h:230,n:"Park Mitte"},
+ {x:3650,y:1950,w:500,h:230,n:"Park Mitte Ost"},
+ {x:4850,y:1950,w:500,h:230,n:"Park Ost"},
+ {x:6050,y:1950,w:500,h:230,n:"Park Ost II"},
+ {x:510,y:2900,w:280,h:230,n:"Park Südwest"},
+ {x:1220,y:2900,w:600,h:230,n:"Park Süd"},
+ {x:3650,y:2900,w:500,h:230,n:"Park Südost"},
+ {x:4850,y:3850,w:500,h:230,n:"Park Südost II"}
+];
+
+const cityCars=[
+ {name:"Stadt-Taxi",color:"#d5b62f",route:[{x:45,y:780},{x:665,y:780},{x:1900,y:780},{x:3100,y:780},{x:4300,y:780},{x:5500,y:780},{x:6750,y:780},{x:6750,y:1745},{x:5500,y:1745},{x:4300,y:1745},{x:3100,y:1745},{x:1900,y:1745},{x:700,y:1745},{x:700,y:780},{x:45,y:780}],speed:.85,t:0},
+ {name:"Stadt-Auto",color:"#3d73c9",route:[{x:700,y:1745},{x:700,y:2695},{x:1900,y:2695},{x:3100,y:2695},{x:4300,y:2695},{x:5500,y:2695},{x:6700,y:2695},{x:6700,y:3645},{x:5500,y:3645},{x:4300,y:3645},{x:3100,y:3645},{x:1900,y:3645},{x:700,y:3645},{x:700,y:2695}],speed:.75,t:.38},
+ {name:"Stadt-Van",color:"#d07a38",route:[{x:1900,y:4595},{x:3100,y:4595},{x:4300,y:4595},{x:5500,y:4595},{x:6700,y:4595},{x:6700,y:3645},{x:5450,y:3645},{x:4250,y:3645},{x:3050,y:3645},{x:1850,y:3645},{x:700,y:3645},{x:700,y:4595},{x:1900,y:4595}],speed:.65,t:.66}
+];
+function updateCityCars(){
+ // Die Autos bewegen sich ausschließlich zwischen exakt definierten Straßen-Mittelpunkten.
+ for(const car of cityCars){
+  const pts=car.route,n=pts.length,t=car.t*n,i=Math.floor(t)%n,f=t-Math.floor(t),a=pts[i],b=pts[(i+1)%n];
+  car.x=a.x+(b.x-a.x)*f; car.y=a.y+(b.y-a.y)*f;
+  car.angle=Math.atan2(b.y-a.y,b.x-a.x);
+  // Sicherheits-Clamp auf die Fahrbahn-Mittellinien an jedem Abschnitt.
+  if(Math.abs(b.y-a.y)<1){ car.y=Math.round(a.y/2)*2; }
+  if(Math.abs(b.x-a.x)<1){ car.x=Math.round(a.x/2)*2; }
+  car.t=(car.t+car.speed/1200)%1;
+ }
+}
+
+
+const player={x:760,y:650,speed:2.5,r:14};
+const camera={x:0,y:0};
+
+// Tag-/Nacht-Zyklus: 1 Minute Tag, 1 Minute Nacht.
+const DAY_MS=60000;
+const NIGHT_MS=60000;
+let dayNightStart=performance.now()-61000;
+
+let crystals=600;
+const inventory={};
+let shopOpen=false;
+let dialogOpen=false;
+let currentNPC=null;
+let realEstateOpen=false;
+let carDealerOpen=false;
+let ownedHouse=null;
+let ownedCar=null;
+
+const questState={bauer:false,wirt:false,haendler:false,fischer:false,foerster:false,turmwart:false,saeger:false,gaertner:false,ruinenforscher:false};
+let caughtFish=0;
+let caughtFishType="";
+let fishingTargetType="normal";
+let wheatHarvested=false;
+let fishingOpen=false;
+let fishGame={x:50,dir:1,target:50,time:0};
+
+// Minispiele: Holzfällen + Ernte + Angeln.
+let miniGameOpen=false;
+let miniGameType="";
+let miniGameState={};
+let miniGameFrame=0;
+const miniGamePlayed={holz:false,ernte:false};
+let miniGameCycle=-1;
+function resetMiniGamesForDay(){
+  const elapsed=Math.max(0,performance.now()-dayNightStart);
+  const cycle=Math.floor(elapsed/(DAY_MS+NIGHT_MS));
+  if(!isNight() && cycle!==miniGameCycle){
+    miniGameCycle=cycle;
+    miniGamePlayed.holz=false; miniGamePlayed.ernte=false;
+  }
+}
+const miniGameZones={
+  holz:{name:"Holzfäller",x:0,y:0,r:125,icon:"🪵"},
+  ernte:{name:"Ernte",x:0,y:0,r:115,icon:"🌾"},
+};
+function nearMiniGameZone(){
+  for(const [id,z] of Object.entries(miniGameZones)){
+    if(Math.hypot(player.x-z.x,player.y-z.y)<z.r) return id;
+  }
+  return null;
+}
+function miniGameReward(type,score){
+  const rewards={holz:7,ernte:6};
+  return Math.max(2, Math.min(rewards[type], 2+Math.floor(score*2)));
+}
+function startMiniGame(type){
+  if(miniGamePlayed[type]){ showRewardPopup("Heute schon gespielt", "🌙 Komm morgen wieder!"); return; }
+  miniGameOpen=true; miniGameType=type;
+  miniGameState={score:0,round:0,x:5,target:50,dir:1,done:false};
+  document.getElementById("miniGame").style.display="flex";
+  miniGameFrame=performance.now();
+  updateMiniGameUI();
+}
+function closeMiniGame(){
+  miniGameOpen=false; miniGameType="";
+  document.getElementById("miniGame").style.display="none";
+}
+function miniGameAction(){
+  if(!miniGameOpen || miniGameState.done)return;
+  const s=miniGameState;
+  if(miniGameType==="holz"){
+    const hit=s.x>=s.target-7 && s.x<=s.target+15;
+    if(hit) s.score++;
+    s.round++; s.target=10+Math.random()*70;
+    const axe=document.getElementById("axeSwing");
+    if(axe){
+      axe.classList.remove("swing"); void axe.offsetWidth; axe.classList.add("swing");
+    }
+    const wood=document.getElementById("woodBlock");
+    if(wood){ wood.textContent=hit?"🪵💥":"🪵"; setTimeout(()=>{if(wood)wood.textContent="🪵"},220); }
+    if(s.round>=5) finishMiniGame();
+  }else if(miniGameType==="ernte"){
+    const hit=s.x>=s.target-9 && s.x<=s.target+13;
+    if(hit) s.score++;
+    s.round++; s.target=8+Math.random()*78;
+    const hoe=document.getElementById("hoeSwing");
+    if(hoe){
+      hoe.classList.remove("swing"); void hoe.offsetWidth; hoe.classList.add("swing");
+    }
+    const wheat=document.getElementById("wheatTargetCrop");
+    if(wheat){ wheat.textContent=hit?"🌾✨":"🌾"; setTimeout(()=>{if(wheat)wheat.textContent="🌾"},220); }
+    if(s.round>=6) finishMiniGame();
+
+  }
+  updateMiniGameUI();
+}
+function finishMiniGame(){
+  const s=miniGameState; s.done=true;
+  const needed=miniGameType==="ernte"?3:2;
+  const won=s.score>=needed;
+  miniGamePlayed[miniGameType]=true;
+  const names={holz:"🪵 Holzfäller",ernte:"🌾 Ernte"};
+  if(won){
+    const reward=miniGameReward(miniGameType,s.score); crystals+=reward; updateHUD();
+    document.getElementById("miniGameStatus").innerHTML=`🎉 Geschafft! <b>${s.score} Treffer</b><br>💎 +${reward} Kristalle`;
+  }else{
+    document.getElementById("miniGameStatus").innerHTML=`😅 Nicht geschafft. <b>${s.score} Treffer</b><br>Du kannst morgen wieder spielen.`;
+  }
+  document.getElementById("miniGameTitle").textContent=names[miniGameType];
+}
+function updateMiniGameUI(){
+  if(!miniGameOpen)return;
+  const s=miniGameState;
+  const names={holz:"🪵 Holzfällen",ernte:"🌾 Ernte-Minispiel"};
+  const total={holz:5,ernte:6};
+  document.getElementById("miniGameTitle").textContent=names[miniGameType];
+  const actionBtn=document.getElementById("miniActionButton");
+  if(actionBtn) actionBtn.textContent=miniGameType==="holz"?"🪓 ZERSCHLAGEN":"🌾 ERNTEN";
+  if(s.done)return;
+  document.getElementById("miniGameStatus").innerHTML=`Treffer: <b>${s.score}</b> · Runde ${s.round+1}/${total[miniGameType]}<br><small>Drücke E oder LEERTASTE im richtigen Moment!</small>`;
+  const bar=document.getElementById("miniGameBar");
+  const target=document.getElementById("miniGameTarget");
+  const cursor=document.getElementById("miniGameCursor");
+  const axe=document.getElementById("axeSwing");
+  if(miniGameType==="holz"){
+    document.getElementById("woodScene").style.display="block";
+    document.getElementById("wheatScene").style.display="none";
+    document.getElementById("axeHint").textContent="🪓 Triff mit der Axt den markierten Bereich des Holzstücks!";
+    bar.style.display="block"; target.style.left=s.target+"%"; cursor.style.left=s.x+"%";
+    if(axe) axe.style.left=s.x+"%";
+  }else if(miniGameType==="ernte"){
+    document.getElementById("woodScene").style.display="none";
+    document.getElementById("wheatScene").style.display="block";
+    document.getElementById("axeHint").textContent="⛏️ Triff mit der Hacke im richtigen Moment das markierte Weizen!";
+    bar.style.display="block"; target.style.left=s.target+"%"; cursor.style.left=s.x+"%";
+    const hoe=document.getElementById("hoeSwing");
+    if(hoe) hoe.style.left=s.x+"%";
+  }
+}
+function updateMiniGame(){
+  if(!miniGameOpen || miniGameState.done)return;
+  const s=miniGameState;
+  s.x+=s.dir*1.35;
+  if(s.x>92){s.x=92;s.dir=-1;}
+  if(s.x<3){s.x=3;s.dir=1;}
+  const cursor=document.getElementById("miniGameCursor");
+  if(cursor)cursor.style.left=s.x+"%";
+  const axe=document.getElementById("axeSwing");
+  if(axe && miniGameType==="holz") axe.style.left=s.x+"%";
+}
+
+// Nachtwache: jede Nacht ein eigener Auftrag mit 3 Kontrollpunkten.
+const nightPatrolPoints=[
+  {x:2740,y:1395,label:"Westtor"},
+  {x:3020,y:1375,label:"Dorfweg"},
+  {x:3290,y:1395,label:"Osttor"}
+];
+let nightPatrolChecked=[false,false,false];
+let nightPatrolCycle=-1;
+let nightPatrolRewarded=false;
+let nightPatrolVisible=false;
+const nightPatrolReward=6;
+
+const roads=[
+ {x:0,y:735,w:3600,h:90},
+ {x:1110,y:0,w:90,h:2400},
+ {x:390,y:455,w:720,h:58},
+ {x:390,y:455,w:58,h:280},
+ {x:1200,y:455,w:680,h:58},
+ {x:1820,y:455,w:58,h:280},
+ {x:1200,y:630,w:700,h:58},
+ {x:500,y:825,w:58,h:350},
+ {x:558,y:1120,w:552,h:58},
+ {x:1200,y:1015,w:650,h:58},
+ {x:1792,y:1015,w:58,h:210},
+ {x:1200,y:630,w:700,h:58},
+ {x:1900,y:735,w:750,h:58},
+ {x:2600,y:735,w:58,h:700},
+ {x:2650,y:1350,w:650,h:58},
+ {x:3250,y:1350,w:58,h:500},
+ {x:2100,y:1500,w:58,h:450},
+ {x:1450,y:1800,w:650,h:58},
+ {x:1450,y:1800,w:58,h:400},
+ {x:1450,y:2200,w:900,h:58},
+ {x:2340,y:1950,w:58,h:250},
+ {x:2350,y:300,w:900,h:58},
+ {x:3200,y:300,w:58,h:435}
+];
+
+
+function overlap(a,b,p=0){
+ return a.x-p<b.x+b.w&&a.x+a.w+p>b.x&&a.y-p<b.y+b.h&&a.y+a.h+p>b.y;
+}
+function roadHit(rect,p=0){return roads.some(r=>overlap(rect,r,p));}
+
+
+/* NPC-Autos: fahren ausschließlich auf den vorhandenen Straßen. */
+const npcCars=[
+ {name:"Hans",emoji:"🚗",color:"#3d73c9",route:[
+  {x:45,y:780},{x:1155,y:780},{x:1155,y:484},{x:750,y:484},{x:419,y:484},{x:419,y:780},{x:1155,y:780},
+  {x:1155,y:659},{x:1829,y:659},{x:1829,y:780},{x:2629,y:780},{x:2629,y:1379},{x:3279,y:1379},{x:3279,y:1829},
+  {x:2129,y:1829},{x:2129,y:1529},{x:2129,y:1829},{x:1450,y:1829},{x:1450,y:2229},{x:2369,y:2229},
+  {x:2369,y:1979},{x:2369,y:1829},{x:2129,y:1829},{x:3279,y:1829},{x:3279,y:1379},{x:2629,y:1379},
+  {x:2629,y:780},{x:1829,y:780},{x:1829,y:659},{x:1155,y:659},{x:1155,y:780},{x:45,y:780}
+ ],speed:1.25,t:0},
+ {name:"Emma",emoji:"🚙",color:"#d07a38",route:[
+  {x:1155,y:45},{x:1155,y:780},{x:2629,y:780},{x:2629,y:1379},{x:3279,y:1379},{x:3279,y:1829},
+  {x:2129,y:1829},{x:1450,y:1829},{x:1450,y:2229},{x:2369,y:2229},{x:2369,y:1829},{x:2129,y:1829},
+  {x:3279,y:1829},{x:3279,y:1379},{x:2629,y:1379},{x:2629,y:780},{x:1155,y:780},{x:1155,y:45}
+ ],speed:1.05,t:0.38},
+ {name:"Leo",emoji:"🚕",color:"#d5b62f",route:[
+  {x:45,y:780},{x:1155,y:780},{x:1155,y:659},{x:1829,y:659},{x:1829,y:780},{x:2629,y:780},
+  {x:2629,y:1379},{x:3279,y:1379},{x:3279,y:1829},{x:2129,y:1829},{x:2129,y:1529},{x:2129,y:1829},
+  {x:1450,y:1829},{x:1450,y:2229},{x:2369,y:2229},{x:2369,y:1829},{x:3279,y:1829},{x:3279,y:1379},
+  {x:2629,y:1379},{x:2629,y:780},{x:1829,y:780},{x:1829,y:659},{x:1155,y:659},{x:1155,y:780},{x:45,y:780}
+ ],speed:1.35,t:0.66}
+];
+
+function updateNPCCars(){
+ for(const car of npcCars){
+  const n=car.route.length;
+  const i=Math.floor(car.t)%n;
+  const j=(i+1)%n;
+  const a=car.route[i], b=car.route[j];
+  const dx=b.x-a.x, dy=b.y-a.y;
+  const len=Math.hypot(dx,dy)||1;
+  car.t+=car.speed/len;
+  if(car.t>=n)car.t-=n;
+ }
+}
+function getCarPose(car){
+ const n=car.route.length;
+ const i=Math.floor(car.t)%n, j=(i+1)%n;
+ const f=car.t-Math.floor(car.t);
+ const a=car.route[i], b=car.route[j];
+ return {x:a.x+(b.x-a.x)*f,y:a.y+(b.y-a.y)*f,angle:Math.atan2(b.y-a.y,b.x-a.x)};
+}
+
+const buildingSeeds=[
+ {x:145,y:135,w:285,h:200,n:"Dorf"},
+ {x:920,y:120,w:250,h:200,n:"Gasthaus"},
+ {x:1430,y:825,w:300,h:190,n:"Markt"},
+ {x:290,y:1225,w:270,h:165,n:"Hof"},
+ {x:1990,y:500,w:260,h:135,n:"Schrein-Haus"}
+];
+
+const buildings=[];
+function placeBuildings(){
+ for(const seed of buildingSeeds){
+  let done=false;
+  for(let radius=0;radius<500&&!done;radius+=20){
+   for(let angle=0;angle<Math.PI*2;angle+=Math.PI/8){
+    const b={
+     x:seed.x+Math.cos(angle)*radius,
+     y:seed.y+Math.sin(angle)*radius,
+     w:seed.w,h:seed.h,n:seed.n
+    };
+    if(b.x<20||b.y<20||b.x+b.w>WORLD_W-20||b.y+b.h>WORLD_H-20)continue;
+    if(roadHit(b,35))continue;
+    if(buildings.some(x=>overlap(b,x,55)))continue;
+    buildings.push(b);done=true;break;
+   }
+  }
+ }
+}
+placeBuildings();
+
+buildings.push(
+{name:"Fischerhütte",x:2820,y:520,w:210,h:150},
+{name:"Waldhaus",x:700,y:1700,w:220,h:150},
+{name:"Turm",x:3000,y:1550,w:170,h:240},
+{name:"Sägewerk",x:1750,y:1880,w:260,h:150},
+{name:"Gartenhaus",x:850,y:1950,w:200,h:140},
+{name:"Ruine",x:2850,y:1900,w:230,h:170},
+{name:"Holzfällerhütte",x:0,y:0,w:230,h:140,miniGame:"holz",icon:"🪵",n:"Holzfällerhütte"},
+{name:"Erntescheune",x:0,y:0,w:190,h:125,miniGame:"ernte",icon:"🌾",n:"Erntescheune"},
+{name:"Anglersteg",x:2520,y:650,w:190,h:105,miniGame:"angeln",icon:"🎣",n:"Anglersteg"}
+);
+
+// Die vier Land-Minispiele bekommen automatisch eine wirklich freie Fläche:
+// kein Weg und kein anderes Gebäude. Dadurch können sie nicht mehr auf Straßen spawnen.
+function placeMiniGameBuildings(){
+  const wanted={
+    holz:{x:2180,y:1650},
+    ernte:{x:90,y:1450},
+  };
+  for(const b of buildings.filter(x=>x.miniGame && x.miniGame!=="angeln")){
+    const pref=wanted[b.miniGame];
+    const candidates=[{x:pref.x,y:pref.y}];
+    for(let radius=60;radius<=700;radius+=60){
+      for(let a=0;a<Math.PI*2;a+=Math.PI/8){
+        candidates.push({x:pref.x+Math.cos(a)*radius,y:pref.y+Math.sin(a)*radius});
+      }
+    }
+    let found=null;
+    for(const pos of candidates){
+      const r={x:pos.x,y:pos.y,w:b.w,h:b.h};
+      if(r.x<30||r.y<30||r.x+r.w>WORLD_W-30||r.y+r.h>WORLD_H-30)continue;
+      if(roadHit(r,28))continue;
+      if(buildings.some(o=>o!==b && overlap(r,o,35)))continue;
+      found=r;break;
+    }
+    if(found){b.x=found.x;b.y=found.y;}
+  }
+  for(const b of buildings.filter(x=>x.miniGame)){
+    if(b.miniGame!=="angeln") miniGameZones[b.miniGame].x=b.x+b.w/2, miniGameZones[b.miniGame].y=b.y+b.h/2;
+  }
+}
+placeMiniGameBuildings();
+
+
+/* See freihalten: keine Gebäude dürfen im Wasser stehen. */
+for(let i=buildings.length-1;i>=0;i--){
+ const b=buildings[i];
+ const cx=b.x+b.w/2, cy=b.y+b.h/2;
+ const nx=(cx-2860)/250, ny=(cy-520)/145;
+ if(nx*nx+ny*ny < 1.0){
+   buildings.splice(i,1);
+ }
+}
+
+
+const trees=[];
+for(let i=0;i<240;i++){
+ const x=(i*421)%(WORLD_W-100)+50;
+ const y=(i*773)%(WORLD_H-100)+50;
+ const r=16+(i%9);
+ const footprint={x:x-r,y:y-r,w:r*2,h:r*2};
+ if(roadHit(footprint,18))continue;
+ if(buildings.some(b=>overlap(footprint,b,20)))continue;
+ const lakeSafeX=(x-2860)/250;
+ const lakeSafeY=(y-520)/145;
+ if(lakeSafeX*lakeSafeX+lakeSafeY*lakeSafeY < 1.12)continue;
+ trees.push({x,y,r});
+}
+
+// Bäume von den neuen Minispiel-Gebäuden fernhalten.
+for(let i=trees.length-1;i>=0;i--){
+ const t=trees[i], tr={x:t.x-t.r,y:t.y-t.r,w:t.r*2,h:t.r*2};
+ if(buildings.some(b=>b.miniGame && overlap(tr,b,4))) trees.splice(i,1);
+}
+
+const crystalObjects=[
+{x:620,y:300,collected:false},{x:1760,y:350,collected:false},{x:1880,y:1110,collected:false},
+{x:2850,y:300,collected:false},{x:3150,y:850,collected:false},{x:2750,y:1450,collected:false},
+{x:900,y:1800,collected:false},{x:2200,y:1950,collected:false},{x:3300,y:2050,collected:false}
+];
+
+const shrine={x:2075,y:650,w:150,h:155};
+const lake={x:2860,y:520,rx:250,ry:145};
+const market=buildings.find(b=>b.n==="Markt");
+const estateSeller={id:"immobilien",name:"Immobilienverkäufer Max",icon:"🏠",color:"#8b5a2b",pos:{x:1230,y:560}};
+const carSeller={id:"autohandel",name:"Autohändler Ben",icon:"🚗",color:"#315d7a",pos:{x:1430,y:560}};
+
+function updateHUD(){
+ document.getElementById("crystals").textContent=crystals;
+ const items=Object.entries(inventory);
+ document.getElementById("inventory").textContent=
+  items.length?items.map(([n,c])=>`${n} x${c}`).join(", "):"leer";
+ updateQuestHUD();
+ const dn=document.getElementById("dayNightHud");
+ if(dn){
+  const total=DAY_MS+NIGHT_MS;
+  const elapsed=(performance.now()-dayNightStart)%total;
+  const night=elapsed>=DAY_MS;
+  const remaining=night?total-elapsed:DAY_MS-elapsed;
+  const sec=Math.max(0,Math.ceil(remaining/1000));
+  const mm=Math.floor(sec/60), ss=String(sec%60).padStart(2,"0");
+  dn.textContent=`${night?"🌙 Nacht":"☀️ Tag"} · noch ${mm}:${ss}`;
+ }
+}
+
+function distanceToMarket(){
+ if(!market)return Infinity;
+ return Math.hypot(player.x-(market.x+market.w/2),player.y-(market.y+market.h/2));
+}
+
+function openShop(){
+ if(distanceToMarket()>180)return;
+ shopOpen=true;
+ document.getElementById("shop").style.display="flex";
+ document.getElementById("shopCrystals").textContent=crystals;
+ document.getElementById("message").textContent="";
+}
+function closeShop(){
+ shopOpen=false;
+ document.getElementById("shop").style.display="none";
+}
+function buyItem(name,price){
+ if(crystals<price){
+  document.getElementById("message").textContent="❌ Du hast nicht genug Kristalle.";
+  return;
+ }
+ crystals-=price;
+ inventory[name]=(inventory[name]||0)+1;
+ document.getElementById("shopCrystals").textContent=crystals;
+ document.getElementById("message").textContent="✅ "+name+" gekauft!";
+ updateHUD();
+}
+
+
+function openRealEstate(){
+ if(realEstateOpen || carDealerOpen || shopOpen || dialogOpen || fishingOpen)return;
+ realEstateOpen=true;
+ document.getElementById("realEstate").style.display="flex";
+ document.getElementById("estateCrystals").textContent=crystals;
+ document.getElementById("estateMessage").textContent=ownedHouse
+   ? `🏠 Du besitzt bereits: ${houseData[ownedHouse].name}.`
+   : "Wähle dein eigenes Zuhause.";
+}
+function closeRealEstate(){
+ realEstateOpen=false;
+ document.getElementById("realEstate").style.display="none";
+}
+const carData={
+ flitzer:{name:"Dorf-Flitzer",price:60,speed:2.8,emoji:"🚗",typeColor:"#3d73c9"},
+ cruiser:{name:"Wald-Cruiser",price:90,speed:3.2,emoji:"🚙",typeColor:"#2f8b57"},
+ sportler:{name:"Tal-Sportler",price:120,speed:3.6,emoji:"🏎️",typeColor:"#c94a4a"}
+};
+function openCarDealer(){
+ if(realEstateOpen || shopOpen || dialogOpen || fishingOpen)return;
+ carDealerOpen=true;
+ document.getElementById("carDealer").style.display="flex";
+ document.getElementById("carDealerCrystals").textContent=crystals;
+ document.getElementById("carDealerMessage").textContent=ownedCar ? `🚗 Du besitzt bereits: ${carData[ownedCar].name}. Geschwindigkeit ${carData[ownedCar].speed}.` : "Wähle dein Auto.";
+}
+function closeCarDealer(){carDealerOpen=false;document.getElementById("carDealer").style.display="none";}
+function sellCar(){
+ if(!ownedCar){document.getElementById("carDealerMessage").textContent="❌ Du besitzt kein Auto.";return;}
+ const c=carData[ownedCar], refund=Math.floor(c.price/2);
+ crystals+=refund; ownedCar=null; player.speed=2.5;
+ document.getElementById("carDealerCrystals").textContent=crystals;
+ document.getElementById("carDealerMessage").innerHTML=`<span class="houseOwned">💰 ${c.name} verkauft! Du bekommst ${refund} 💎 (50% des Kaufpreises).</span>`;
+ updateHUD();
+}
+function buyCar(type){
+ const c=carData[type];
+ if(ownedCar){document.getElementById("carDealerMessage").textContent="❌ Du besitzt bereits ein Auto. Verkaufe es zuerst für 50%, dann kannst du ein anderes kaufen.";return;}
+ if(crystals<c.price){document.getElementById("carDealerMessage").textContent=`❌ Du brauchst ${c.price} 💎 Kristalle.`;return;}
+ crystals-=c.price; ownedCar=type; player.speed=c.speed;
+ document.getElementById("carDealerCrystals").textContent=crystals;
+ document.getElementById("carDealerMessage").innerHTML=`<span class="houseOwned">✅ ${c.name} gekauft! Geschwindigkeit: ${c.speed}.</span>`;
+ updateHUD();
+ setTimeout(closeCarDealer,900);
+}
+
+const houseData={
+ klein:{name:"Kleines Haus",price:90,x:1250,y:300,w:170,h:120},
+ gross:{name:"Großes Haus",price:100,x:1450,y:300,w:220,h:150},
+ villa:{name:"Villa",price:150,x:1700,y:300,w:280,h:190}
+};
+function houseOverlaps(a,b,p=0){
+ return a.x-p < b.x+b.w && a.x+a.w+p > b.x && a.y-p < b.y+b.h && a.y+a.h+p > b.y;
+}
+function findFreeHouseSpot(h){
+ const preferred={x:h.x,y:h.y};
+ const candidates=[];
+ candidates.push(preferred);
+ for(let radius=80;radius<=1200;radius+=80){
+   for(let angle=0;angle<Math.PI*2;angle+=Math.PI/12){
+     candidates.push({x:preferred.x+Math.cos(angle)*radius,y:preferred.y+Math.sin(angle)*radius});
+   }
+ }
+ for(const pos of candidates){
+   const rect={x:pos.x,y:pos.y,w:h.w,h:h.h};
+   if(rect.x<30||rect.y<30||rect.x+rect.w>WORLD_W-30||rect.y+rect.h>WORLD_H-30) continue;
+   if(roads.some(r=>houseOverlaps(rect,r,18))) continue;
+   if(buildings.some(b=>houseOverlaps(rect,b,28))) continue;
+   return rect;
+ }
+ return null;
+}
+function sellHouse(){
+ if(!ownedHouse){
+   document.getElementById("estateMessage").textContent="❌ Du besitzt kein Haus.";
+   return;
+ }
+ const h=houseData[ownedHouse];
+ const refund=Math.floor(h.price/2);
+ const ownedIndex=buildings.findIndex(b=>b.owned);
+ if(ownedIndex!==-1) buildings.splice(ownedIndex,1);
+ crystals+=refund;
+ const soldName=h.name;
+ ownedHouse=null;
+ document.getElementById("estateCrystals").textContent=crystals;
+ document.getElementById("estateMessage").innerHTML=`<span class="houseOwned">💰 ${soldName} verkauft! Du bekommst ${refund} 💎 (50% des Kaufpreises).</span>`;
+ updateHUD();
+}
+function buyHouse(type){
+ const h=houseData[type];
+ if(ownedHouse){
+   document.getElementById("estateMessage").textContent="❌ Du besitzt bereits ein Haus.";
+   return;
+ }
+ if(crystals<h.price){
+   document.getElementById("estateMessage").textContent=`❌ Du brauchst ${h.price} 💎 Kristalle.`;
+   return;
+ }
+ const spot=findFreeHouseSpot(h);
+ if(!spot){
+   document.getElementById("estateMessage").textContent="❌ Keine freie Fläche für dieses Haus gefunden.";
+   return;
+ }
+ // Bäume, die in die Hausfläche ragen würden, werden entfernt.
+ for(let i=trees.length-1;i>=0;i--){
+   const t=trees[i];
+   const treeRect={x:t.x-t.r,y:t.y-t.r,w:t.r*2,h:t.r*2};
+   if(houseOverlaps(spot,treeRect,0)) trees.splice(i,1);
+ }
+ crystals-=h.price;
+ ownedHouse=type;
+ buildings.push({name:"🏠 "+h.name,x:spot.x,y:spot.y,w:h.w,h:h.h,owned:true});
+ h.x=spot.x; h.y=spot.y;
+ document.getElementById("estateCrystals").textContent=crystals;
+ document.getElementById("estateMessage").innerHTML=`<span class="houseOwned">✅ ${h.name} gekauft! Dein Haus steht auf einer freien Fläche.</span>`;
+ updateHUD();
+ setTimeout(closeRealEstate, 900);
+}
+
+/* NPCs */
+function nearBuilding(name,dx,dy){
+ const b=buildings.find(x=>x.n===name);
+ return b?{x:b.x+b.w/2+dx,y:b.y+b.h/2+dy}:{x:100,y:100};
+}
+
+const npcData=[
+{id:"bauer",name:"Bauer Hans",icon:"🧑‍🌾",color:"#4d8b3d",pos:nearBuilding("Hof",-170,-10),quest:"Ernte das Weizenfeld beim Hof und sammle 3 Kristalle. Danach komm zu mir.",reward:6},
+{id:"wirt",name:"Wirtin Emma",icon:"🧑‍🍳",color:"#9a6235",pos:nearBuilding("Gasthaus",170,40),quest:"Bring mir 1 Wasser aus dem Laden.",reward:5},
+{id:"haendler",name:"Händler Leo",icon:"🧑‍💼",color:"#7b4bb0",pos:nearBuilding("Markt",-180,80),quest:"Kaufe 1 Brot im Laden und bring es mir.",reward:10},
+{id:"fischer",name:"Fischer Tom",icon:"🎣",color:"#2b7da0",pos:{x:2860,y:700},quest:"Gehe zum See, fange im Angel-Minispiel 1 Fisch und bring ihn mir.",reward:8},
+{id:"foerster",name:"Försterin Mira",icon:"🌲",color:"#357a42",pos:{x:800,y:1580},quest:"Bring mir 2 Äpfel für die Waldarbeiter.",reward:7},
+{id:"turmwart",name:"Turmwächter Erik",icon:"🛡️",color:"#555b68",pos:{x:3100,y:1450},quest:"Sammle insgesamt 7 Kristalle.",reward:12},
+{id:"saeger",name:"Säger Paul",icon:"🪵",color:"#8a5a2b",pos:{x:1660,y:1910},quest:"Bring mir 2 Brote zum Sägewerk.",reward:9},
+{id:"gaertner",name:"Gärtnerin Lina",icon:"🌻",color:"#c48b2d",pos:{x:1080,y:1960},quest:"Bring mir 2 Wasser für den Garten.",reward:8},
+{id:"ruinenforscher",name:"Forscherin Nora",icon:"🔎",color:"#6c6c78",pos:{x:2980,y:1850},quest:"Finde insgesamt 9 Kristalle und untersuche die Ruinen.",reward:15}
+];
+
+function inventoryCount(name){return inventory[name]||0;}
+
+function questProgress(npc){
+const got=crystalObjects.filter(c=>c.collected).length;
+if(npc.id==="bauer")return `${wheatHarvested?"✅ Weizen geerntet":"⬜ Weizen ernten"} · ${Math.min(got,3)}/3 Kristalle`;
+if(npc.id==="wirt")return `${Math.min(inventoryCount("Wasser"),1)}/1 Wasser`;
+if(npc.id==="haendler")return `${Math.min(inventoryCount("Brot"),1)}/1 Brot`;
+if(npc.id==="fischer")return `${Math.min(caughtFish,1)}/1 Fisch`;
+if(npc.id==="foerster")return `${Math.min(inventoryCount("Apfel"),2)}/2 Äpfel`;
+if(npc.id==="turmwart")return `${Math.min(got,7)}/7 Kristalle`;
+if(npc.id==="saeger")return `${Math.min(inventoryCount("Brot"),2)}/2 Brote`;
+if(npc.id==="gaertner")return `${Math.min(inventoryCount("Wasser"),2)}/2 Wasser`;
+if(npc.id==="ruinenforscher")return `${Math.min(got,9)}/9 Kristalle`;
+return "";
+}
+
+function questCompleted(npc){
+ return questState[npc.id];
+}
+
+function questReady(npc){
+const got=crystalObjects.filter(c=>c.collected).length;
+if(npc.id==="bauer")return wheatHarvested && got>=3;
+if(npc.id==="wirt")return inventoryCount("Wasser")>=1;
+if(npc.id==="haendler")return inventoryCount("Brot")>=1;
+if(npc.id==="fischer")return caughtFish>=1;
+if(npc.id==="foerster")return inventoryCount("Apfel")>=2;
+if(npc.id==="turmwart")return got>=7;
+if(npc.id==="saeger")return inventoryCount("Brot")>=2;
+if(npc.id==="gaertner")return inventoryCount("Wasser")>=2;
+if(npc.id==="ruinenforscher")return got>=9;
+return false;
+}
+
+function updateQuestHUD(){
+let active=npcData.filter(n=>!questCompleted(n));
+const hud=document.getElementById("questHud");
+hud.style.display="block";
+if(!active.length){hud.innerHTML="<b>📜 Quests</b><br>🎉 Alle Quests erledigt!";return;}
+hud.innerHTML="<b>📜 Quests</b><br>"+active.map(n=>`⬜ ${n.name} – ${questProgress(n)}`).join("<br>");
+}
+
+function nearestNPC(){
+ let best=null,dist=Infinity;
+ for(const npc of [...npcData,estateSeller]){
+  const d=Math.hypot(player.x-npc.pos.x,player.y-npc.pos.y);
+  if(d<dist){dist=d;best=npc;}
+ }
+ return dist<110?best:null;
+}
+
+function distanceToLake(){
+ return Math.hypot(player.x-lake.x,player.y-lake.y);
+}
+
+function fishingQuestActive(){
+  return !questState.fischer && caughtFish<1;
+}
+
+function isNight(){
+ const elapsed=(performance.now()-dayNightStart)%(DAY_MS+NIGHT_MS);
+ return elapsed>=DAY_MS;
+}
+function syncNightPatrol(){
+ resetMiniGamesForDay();
+ const elapsed=Math.max(0,performance.now()-dayNightStart);
+ const cycle=Math.floor(elapsed/(DAY_MS+NIGHT_MS));
+ if(isNight() && cycle!==nightPatrolCycle){
+  nightPatrolCycle=cycle;
+  nightPatrolChecked=[false,false,false];
+  nightPatrolRewarded=false;
+  nightPatrolVisible=false;
+ }
+ if(!isNight()) nightPatrolVisible=false;
+}
+function nightPatrolDone(){return nightPatrolChecked.every(Boolean);}
+function nearestNightPatrolPoint(){
+ let best=-1,dist=Infinity;
+ for(let i=0;i<nightPatrolPoints.length;i++){
+  if(nightPatrolChecked[i])continue;
+  const p=nightPatrolPoints[i];
+  const d=Math.hypot(player.x-p.x,player.y-p.y);
+  if(d<dist){dist=d;best=i;}
+ }
+ return best;
+}
+function skipNight(){
+ if(!isNight())return;
+ dayNightStart=performance.now();
+}
+function ownedHouseBuilding(){return buildings.find(b=>b.owned)||null;}
+function distanceToOwnedHouse(){
+ const b=ownedHouseBuilding();
+ return b?Math.hypot(player.x-(b.x+b.w/2),player.y-(b.y+b.h/2)):Infinity;
+}
+
+function interact(){
+ if(inCity){ if(player.x<140 && player.y>650 && player.y<900) leaveCity(); return; }
+ if(carDealerOpen)return;
+ const carDist=Math.hypot(player.x-carSeller.pos.x,player.y-carSeller.pos.y);
+ const estateDist=Math.hypot(player.x-estateSeller.pos.x,player.y-estateSeller.pos.y);
+ if(carDist<110 && carDist<=estateDist){openCarDealer();return;}
+ if(estateDist<110 && estateDist<carDist){openRealEstate();return;}
+ syncNightPatrol();
+ if(shopOpen||dialogOpen||fishingOpen)return;
+
+ // Nachts kann die Nacht direkt am eigenen Haus übersprungen werden.
+ if(isNight() && ownedHouseBuilding() && distanceToOwnedHouse()<260){
+  skipNight();
+  updateHUD();
+  return;
+ }
+
+ // Minispiele können tagsüber und nachts an ihren jeweiligen Orten gestartet werden.
+ const zone=nearMiniGameZone();
+ if(zone){
+  startMiniGame(zone);
+  return;
+ }
+ const angler=buildings.find(b=>b.miniGame==="angeln");
+ if(angler && Math.hypot(player.x-(angler.x+angler.w/2),player.y-(angler.y+angler.h/2))<150){
+  openFishing();
+  return;
+ }
+
+ // Nachtwache: zuerst die drei Kontrollpunkte prüfen.
+ if(isNight()){
+  const patrolIndex=nearestNightPatrolPoint();
+  if(patrolIndex>=0){
+   const p=nightPatrolPoints[patrolIndex];
+   if(Math.hypot(player.x-p.x,player.y-p.y)<85){
+    nightPatrolChecked[patrolIndex]=true;
+    showRewardPopup(`🌙 ${p.label} kontrolliert`, `${nightPatrolChecked.filter(Boolean).length}/3 Kontrollpunkte`);
+    updateHUD();
+    return;
+   }
+  }
+
+  // Nachts schlafen alle NPCs und Jobs sind geschlossen – nur der Turmwächter bleibt wach.
+  const npc=nearestNPC();
+  if(!npc || npc.id!=="turmwart"){
+   showRewardPopup("🌙 Alle schlafen","Nachts sind alle Jobs geschlossen – nur der Turmwächter arbeitet.");
+   return;
+  }
+  openNPCDialog(npc);
+  return;
+ }
+
+ // Am Anglersteg / See startet E das Angel-Minispiel.
+ if(!isNight() && fishingQuestActive() && (Math.hypot(player.x-2550,player.y-500)<220 || distanceToLake()<420)){
+  openFishing();
+  return;
+ }
+
+ const npc=nearestNPC();
+ if(npc){
+  if(npc.id==="immobilien"){ openRealEstate(); return; }
+  openNPCDialog(npc);
+  return;
+ }
+
+ if(!wheatHarvested){
+  const d=Math.hypot(player.x-150,player.y-1305);
+  if(d<130){
+   wheatHarvested=true;
+   updateHUD();
+   showRewardPopup("🌾 Weizen geerntet!","Bauer Hans – Aufgabe erfüllt");
+   return;
+  }
+ }
+
+ if(distanceToMarket()<180){
+  openShop();
+ }
+}
+
+function openNPCDialog(npc){
+currentNPC=npc;dialogOpen=true;
+document.getElementById("dialog").style.display="flex";
+document.getElementById("dialogTitle").textContent=`${npc.icon} ${npc.name}`;
+const text=document.getElementById("dialogText"),action=document.getElementById("dialogAction");
+if(npc.id==="turmwart" && isNight()){
+ nightPatrolVisible=true;
+ text.innerHTML=nightPatrolDone()
+  ? `<b>Nachtwache:</b> Alle 3 Kontrollpunkte sind kontrolliert. Komm zurück zu mir!<br><br><b>Belohnung:</b> 💎 ${nightPatrolReward} Kristalle`
+  : `<b>Nachtwache:</b> Kontrolliere die 3 markierten Punkte im Dorf.<br><br><b>Fortschritt:</b> ${nightPatrolChecked.filter(Boolean).length}/3 Kontrollpunkte<br><br><b>Belohnung:</b> 💎 ${nightPatrolReward} Kristalle`;
+ action.textContent=nightPatrolDone()&&!nightPatrolRewarded?"Nachtjob abschließen":"Noch nicht fertig";
+ return;
+}
+if(questCompleted(npc)){
+text.innerHTML=`Danke! Diese Aufgabe ist bereits erledigt.<br><br>Belohnung: 💎 ${npc.reward} Kristalle`;
+action.textContent="Erledigt";return;
+}
+text.innerHTML=`<b>Aufgabe:</b> ${npc.quest}<br><br><b>Fortschritt:</b> ${questProgress(npc)}<br><br><b>Belohnung:</b> 💎 ${npc.reward} Kristalle`;
+action.textContent=questReady(npc)?"Quest abschließen":"Noch nicht fertig";
+}
+
+function giveQuestReward(npc){
+  if(!npc || questState[npc.id]) return false;
+
+  const id=npc.id;
+
+  // Benötigte Gegenstände erst beim erfolgreichen Abschluss verbrauchen.
+  if(id==="wirt") inventory["Wasser"]--;
+  if(id==="haendler") inventory["Brot"]--;
+  if(id==="foerster") inventory["Apfel"]-=2;
+  if(id==="saeger") inventory["Brot"]-=2;
+  if(id==="gaertner") inventory["Wasser"]-=2;
+
+  questState[id]=true;
+  const reward=Number(npc.reward)||0;
+  crystals+=reward;
+
+  updateHUD();
+  updateQuestHUD();
+
+  // Deutliche Bestätigung für den Spieler.
+  showRewardPopup(`+${reward} 💎`, npc.name);
+  return true;
+}
+
+let rewardPopupText="";
+let rewardPopupSub="";
+let rewardPopupUntil=0;
+
+function showRewardPopup(text,sub){
+  rewardPopupText=text;
+  rewardPopupSub=sub;
+  rewardPopupUntil=performance.now()+2600;
+}
+
+function dialogAction(){
+  if(!currentNPC) return;
+  if(currentNPC.id==="turmwart" && isNight()){
+   if(!nightPatrolDone() || nightPatrolRewarded) return;
+   crystals+=nightPatrolReward;
+   nightPatrolRewarded=true;
+   updateHUD();
+   showRewardPopup(`+${nightPatrolReward} 💎`,`🌙 Nachtwache abgeschlossen`);
+   openNPCDialog(currentNPC);
+   return;
+  }
+  if(questCompleted(currentNPC) || !questReady(currentNPC)) return;
+
+  const npc=currentNPC;
+  if(!giveQuestReward(npc)) return;
+
+  openNPCDialog(npc);
+}
+
+function closeDialog(){
+ dialogOpen=false;
+ currentNPC=null;
+ document.getElementById("dialog").style.display="none";
+}
+
+const keys={};
+
+// Online-Multiplayer: bis zu zwei Spieler teilen sich dieselbe Welt.
+const remotePlayers=new Map();
+let multiplayerSocket=null;
+let multiplayerId=null;
+let lastNetworkSend=0;
+const multiplayerStatus=document.getElementById("multiplayerStatus");
+
+function setMultiplayerStatus(text){ if(multiplayerStatus) multiplayerStatus.textContent=text; }
+function connectMultiplayer(){
+  if(location.protocol!=="http:" && location.protocol!=="https:"){
+    setMultiplayerStatus("🌐 Server nötig");
+    return;
+  }
+  const protocol=location.protocol==="https:"?"wss:":"ws:";
+  try{
+    multiplayerSocket=new WebSocket(protocol+"//"+location.host);
+    multiplayerSocket.addEventListener("open",()=>{
+      setMultiplayerStatus("🟢 Online · warte auf Spieler");
+      sendPlayerState(true);
+    });
+    multiplayerSocket.addEventListener("message",ev=>{
+      try{
+        const msg=JSON.parse(ev.data);
+        if(msg.type==="welcome") multiplayerId=msg.id;
+        if(msg.type==="players"){
+          const incoming=new Map();
+          for(const pl of msg.players){
+            if(pl.id===multiplayerId) continue;
+            incoming.set(pl.id,pl);
+          }
+          remotePlayers.clear();
+          incoming.forEach((v,k)=>remotePlayers.set(k,v));
+          setMultiplayerStatus(`🟢 Online · ${remotePlayers.size+1}/2 Spieler`);
+        }
+        if(msg.type==="full") setMultiplayerStatus("🟡 Server voll · 2 Spieler");
+      }catch(e){}
+    });
+    multiplayerSocket.addEventListener("close",()=>{remotePlayers.clear();setMultiplayerStatus("🔴 Verbindung getrennt");});
+    multiplayerSocket.addEventListener("error",()=>setMultiplayerStatus("🔴 Server nicht erreichbar"));
+  }catch(e){ setMultiplayerStatus("🔴 Server nicht erreichbar"); }
+}
+function sendPlayerState(force=false){
+  const now=performance.now();
+  if(!force && now-lastNetworkSend<50) return;
+  if(!multiplayerSocket || multiplayerSocket.readyState!==WebSocket.OPEN) return;
+  lastNetworkSend=now;
+  multiplayerSocket.send(JSON.stringify({type:"state",x:player.x,y:player.y,inCity:!!inCity}));
+}
+function drawRemotePlayers(){
+  for(const pl of remotePlayers.values()){
+    const x=pl.x-camera.x,y=pl.y-camera.y;
+    if(x<-50||y<-50||x>canvas.width+50||y>canvas.height+50) continue;
+    ctx.fillStyle="rgba(0,0,0,.25)";ctx.beginPath();ctx.ellipse(x,y+17,15,6,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#e05252";ctx.beginPath();ctx.arc(x,y,14,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#f2c29b";ctx.beginPath();ctx.arc(x,y-17,9,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#fff";ctx.font="12px Arial";ctx.textAlign="center";ctx.fillText("Spieler 2",x,y-29);ctx.textAlign="left";
+  }
+}
+
+
+window.addEventListener("keydown",e=>{
+ const key=e.key.toLowerCase();
+ keys[key]=true;
+
+ if(key==="e" && miniGameOpen){ e.preventDefault(); miniGameAction(); return; }
+ if(key==="e")interact();
+ if(key===" " && fishingOpen){e.preventDefault();fishTry();}
+ if(key===" " && miniGameOpen){e.preventDefault();miniGameAction();}
+ if(key==="escape"){
+  if(shopOpen)closeShop();
+  if(dialogOpen)closeDialog();
+  if(realEstateOpen)closeRealEstate();
+  if(carDealerOpen)closeCarDealer();
+ }
+});
+window.addEventListener("keyup",e=>{ keys[e.key.toLowerCase()]=false; });
+// Verhindert festhängende Bewegung, wenn das Fenster den Fokus verliert
+// (z.B. Alt+Tab, Klick auf UI oder Wechsel des Browser-Tabs).
+function clearMovementKeys(){
+  for(const k of ["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright"]) keys[k]=false;
+}
+window.addEventListener("blur",clearMovementKeys);
+document.addEventListener("visibilitychange",()=>{ if(document.hidden) clearMovementKeys(); });
+window.addEventListener("pagehide",clearMovementKeys);
+
+function enterCity(){
+ if(inCity)return;
+ inCity=true;
+ cityPlayer.x=210; cityPlayer.y=2340;
+ player.x=cityPlayer.x; player.y=cityPlayer.y;
+ updateHUD();
+}
+function leaveCity(){
+ if(!inCity)return;
+ inCity=false;
+ player.x=WORLD_W-70; player.y=780;
+ updateHUD();
+}
+function drawCity(){
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+ ctx.fillStyle=isNight()?"#3f4650":"#9a9a9a"; ctx.fillRect(0,0,canvas.width,canvas.height);
+ ctx.fillStyle="#858585";
+ for(let x=0;x<CITY_W;x+=80)for(let y=0;y<CITY_H;y+=80)if((x/80+y/80)%2===0)ctx.fillRect(x-camera.x,y-camera.y,80,80);
+ // Stadtparks
+ for(const p of cityParks){
+  const px=p.x-camera.x,py=p.y-camera.y;
+  ctx.fillStyle="#4f9b55";ctx.fillRect(px,py,p.w,p.h);
+  ctx.strokeStyle="#2f6f38";ctx.lineWidth=5;ctx.strokeRect(px+3,py+3,p.w-6,p.h-6);
+  // Wege
+  ctx.strokeStyle="#d7c49a";ctx.lineWidth=12;ctx.lineCap="round";
+  ctx.beginPath();ctx.moveTo(px+20,py+p.h/2);ctx.lineTo(px+p.w-20,py+p.h/2);ctx.moveTo(px+p.w/2,py+20);ctx.lineTo(px+p.w/2,py+p.h-20);ctx.stroke();
+  // Bäume
+  const spots=[[45,45],[p.w-45,45],[45,p.h-45],[p.w-45,p.h-45],[p.w/2-70,55],[p.w/2+70,p.h-55]];
+  for(const [tx,ty] of spots){
+   ctx.fillStyle="#70452c";ctx.fillRect(px+tx-4,py+ty+8,8,18);
+   ctx.fillStyle="#236b35";ctx.beginPath();ctx.arc(px+tx,py+ty,19,0,Math.PI*2);ctx.fill();
+   ctx.fillStyle="#3d8a49";ctx.beginPath();ctx.arc(px+tx-5,py+ty-5,12,0,Math.PI*2);ctx.fill();
+  }
+  // Bänke
+  ctx.fillStyle="#7a4b2b";ctx.fillRect(px+p.w/2-25,py+p.h/2-38,50,7);ctx.fillRect(px+p.w/2-25,py+p.h/2+25,50,7);
+  ctx.fillStyle="#fff";ctx.font="bold 13px Arial";ctx.fillText("🌳 "+p.n,px+12,py+22);
+ }
+
+ for(const r of cityRoads){
+  ctx.fillStyle="#4b4b4b";ctx.fillRect(r.x-camera.x,r.y-camera.y,r.w,r.h);
+  ctx.strokeStyle="#e5e5e5";ctx.lineWidth=3;ctx.setLineDash([20,18]);ctx.beginPath();
+  if(r.w>r.h){ctx.moveTo(r.x-camera.x,r.y+r.h/2-camera.y);ctx.lineTo(r.x+r.w-camera.x,r.y+r.h/2-camera.y);}
+  else{ctx.moveTo(r.x+r.w/2-camera.x,r.y-camera.y);ctx.lineTo(r.x+r.w/2-camera.x,r.y+r.h-camera.y);}
+  ctx.stroke();ctx.setLineDash([]);
+ }
+ // NPC-Autos der Stadt
+ for(const car of cityCars){
+  const cx=car.x-camera.x,cy=car.y-camera.y;
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(car.angle||0);
+  ctx.fillStyle="rgba(0,0,0,.3)";ctx.fillRect(-22,10,44,7);
+  ctx.fillStyle=car.color;ctx.fillRect(-23,-10,46,20);
+  ctx.fillStyle="#bfe8ff";ctx.fillRect(-13,-13,10,6);ctx.fillRect(2,-13,10,6);
+  ctx.fillStyle="#222";ctx.fillRect(-17,-14,8,5);ctx.fillRect(9,-14,8,5);ctx.fillRect(-17,9,8,5);ctx.fillRect(9,9,8,5);
+  ctx.fillStyle="#fff3a8";ctx.fillRect(19,-5,4,4);ctx.fillRect(19,1,4,4);ctx.restore();
+  ctx.fillStyle="#fff";ctx.font="10px Arial";ctx.textAlign="center";ctx.fillText(car.name,cx,cy-18);ctx.textAlign="left";
+ }
+ // Eigenes gekauftes Auto bleibt auch in der Stadt sichtbar.
+ if(ownedCar){
+  const c=carData[ownedCar],cx=player.x-camera.x,cy=player.y-camera.y+18;
+  ctx.save();ctx.translate(cx,cy);ctx.fillStyle="rgba(0,0,0,.35)";ctx.fillRect(-27,11,54,8);ctx.fillStyle=c.typeColor||"#2f78c4";ctx.fillRect(-27,-12,54,24);
+  ctx.fillStyle="#bfe8ff";ctx.fillRect(-16,-16,13,7);ctx.fillRect(3,-16,13,7);ctx.fillStyle="#222";ctx.fillRect(-20,-17,10,6);ctx.fillRect(10,-17,10,6);ctx.fillRect(-20,11,10,6);ctx.fillRect(10,11,10,6);ctx.fillStyle="#fff3a8";ctx.fillRect(23,-6,4,5);ctx.fillRect(23,1,4,5);ctx.restore();
+ }
+ drawRemotePlayers();
+ for(const b of cityBuildings){
+  const bx=b.x-camera.x,by=b.y-camera.y;
+  // Echte mehrstöckige Hochhäuser mit vielen Fenstern.
+  ctx.fillStyle="#7d8792";ctx.fillRect(bx,by,b.w,b.h);
+  ctx.fillStyle="#5d6670";ctx.fillRect(bx+8,by+8,b.w-16,b.h-16);
+  const floors=b.floors||5, floorH=(b.h-28)/floors;
+  for(let f=0;f<floors;f++){
+   const wy=by+18+f*floorH;
+   ctx.fillStyle="#a9d9ee";
+   const cols=Math.max(3,Math.floor(b.w/52));
+   const gap=b.w/(cols+1);
+   for(let c=1;c<=cols;c++){
+    const ww=Math.min(24,gap*.52);
+    ctx.fillRect(bx+c*gap-ww/2,wy,ww,Math.min(15,floorH*.48));
+   }
+   ctx.strokeStyle="rgba(255,255,255,.18)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(bx+10,wy+floorH-2);ctx.lineTo(bx+b.w-10,wy+floorH-2);ctx.stroke();
+  }
+  ctx.fillStyle="#39424c";ctx.fillRect(bx+b.w/2-22,by+b.h-38,44,38);
+  ctx.fillStyle="#fff";ctx.font="bold 14px Arial";ctx.fillText(b.n,bx+10,by+15);
+ }
+ // Stadt-HUD mit demselben Tag-/Nacht-Zyklus wie Green Valley.
+ ctx.fillStyle="rgba(0,0,0,.78)";ctx.fillRect(20,20,350,98);
+ ctx.fillStyle="#fff";ctx.font="bold 20px Arial";ctx.fillText("🏙️ STADT",35,49);
+ const total=DAY_MS+NIGHT_MS,elapsed=(performance.now()-dayNightStart)%total,remaining=isNight()?total-elapsed:DAY_MS-elapsed,sec=Math.ceil(remaining/1000),mm=Math.floor(sec/60),ss=String(sec%60).padStart(2,"0");
+ ctx.font="bold 14px Arial";ctx.fillText(`${isNight()?"🌙 Nacht":"☀️ Tag"} · noch ${mm}:${ss}`,35,73);
+ ctx.font="13px Arial";ctx.fillText("Hier kommen später weitere Orte und",35,96);ctx.fillText("Funktionen hinzu.",35,113);
+ if(isNight()){ctx.fillStyle="rgba(0,0,30,.38)";ctx.fillRect(0,0,canvas.width,canvas.height);}
+ ctx.fillStyle="#2454d6";ctx.beginPath();ctx.arc(player.x-camera.x,player.y-camera.y,player.r,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle="#fff";ctx.font="12px Arial";ctx.fillText("Du",player.x-10-camera.x,player.y-22-camera.y);
+ if(player.x<35 && player.y>1470 && player.y<1650){
+  ctx.fillStyle="rgba(0,0,0,.8)";ctx.fillRect(20,canvas.height-62,330,40);ctx.fillStyle="#fff";ctx.font="bold 14px Arial";ctx.fillText("← E – zurück nach Green Valley",35,canvas.height-37);
+ }
+}
+
+function movePlayer(){
+  if(fishingOpen)return;
+  if(shopOpen||dialogOpen||realEstateOpen||carDealerOpen)return;
+  let dx=0,dy=0;
+  if(keys["w"]||keys["arrowup"])dy--;
+  if(keys["s"]||keys["arrowdown"])dy++;
+  if(keys["a"]||keys["arrowleft"])dx--;
+  if(keys["d"]||keys["arrowright"])dx++;
+  if(dx||dy){
+   const len=Math.hypot(dx,dy); dx/=len; dy/=len;
+   player.x+=dx*player.speed; player.y+=dy*player.speed;
+  }
+  if(inCity){
+   player.x=Math.max(20,Math.min(CITY_W-20,player.x));
+   player.y=Math.max(20,Math.min(CITY_H-20,player.y));
+   cityPlayer.x=player.x; cityPlayer.y=player.y;
+   if(player.x<25 && player.y>1470 && player.y<1650) leaveCity();
+   return;
+  }
+  // Nur die Straße am rechten Kartenrand führt in die Stadt.
+  if(player.x>WORLD_W-45 && player.y>690 && player.y<870){ enterCity(); return; }
+  player.x=Math.max(20,Math.min(WORLD_W-20,player.x));
+  player.y=Math.max(20,Math.min(WORLD_H-20,player.y));
+}
+
+function collectCrystals(){
+ for(const c of crystalObjects){
+  if(c.collected)continue;
+  if(Math.hypot(player.x-c.x,player.y-c.y)<30){
+   c.collected=true;
+   crystals++;
+   updateHUD();
+  }
+ }
+}
+
+function updateCamera(){
+ camera.x=player.x-canvas.width/2;
+ camera.y=player.y-canvas.height/2;
+ const ww=inCity?CITY_W:WORLD_W, hh=inCity?CITY_H:WORLD_H;
+ camera.x=Math.max(0,Math.min(ww-canvas.width,camera.x));
+ camera.y=Math.max(0,Math.min(hh-canvas.height,camera.y));
+}
+
+function draw(){
+ if(inCity){ drawCity(); return; }
+ syncNightPatrol();
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+ ctx.fillStyle="#78b85a";
+ ctx.fillRect(0,0,canvas.width,canvas.height);
+
+ ctx.fillStyle="#6eaa52";
+ for(let x=0;x<WORLD_W;x+=80)
+  for(let y=0;y<WORLD_H;y+=80)
+   if((x/80+y/80)%2===0)ctx.fillRect(x-camera.x,y-camera.y,80,80);
+
+
+ /* Minispiel-Orte – tagsüber und nachts sichtbar */
+ {   for(const [id,z] of Object.entries(miniGameZones)){
+     const mx=z.x-camera.x, my=z.y-camera.y;
+     ctx.fillStyle=miniGamePlayed[id]?"rgba(120,120,120,.12)":"rgba(255,210,40,.18)";
+     ctx.beginPath();ctx.arc(mx,my,34,0,Math.PI*2);ctx.fill();
+     ctx.strokeStyle=miniGamePlayed[id]?"#aaa":"#ffd43b";ctx.lineWidth=3;
+     ctx.beginPath();ctx.arc(mx,my,25,0,Math.PI*2);ctx.stroke();
+     ctx.fillStyle="#fff";ctx.font="22px Arial";ctx.textAlign="center";ctx.fillText(z.icon,mx,my+8);
+     ctx.font="bold 12px Arial";ctx.fillText(z.name,mx,my-38);
+     if(Math.hypot(player.x-z.x,player.y-z.y)<z.r && !miniGamePlayed[id]){
+       ctx.fillStyle="rgba(0,0,0,.78)";ctx.fillRect(mx-100,my+38,200,27);
+       ctx.fillStyle="#fff";ctx.font="bold 13px Arial";ctx.fillText("E – Minispiel starten",mx,my+57);
+     }
+     ctx.textAlign="left";
+   }
+ }
+
+ /* See */
+ ctx.save();
+ ctx.fillStyle="#4fa9d8";
+ ctx.strokeStyle="#236b91";
+ ctx.lineWidth=8;
+ ctx.beginPath();
+ ctx.ellipse(2860-camera.x,520-camera.y,250,145,0,0,Math.PI*2);
+ ctx.fill();
+ ctx.stroke();
+
+ /* kleine Wellen */
+ ctx.strokeStyle="rgba(255,255,255,.45)";
+ ctx.lineWidth=3;
+ for(let i=-2;i<=2;i++){
+   ctx.beginPath();
+   ctx.arc(2860-camera.x+i*55,520-camera.y+i*8,35,0.15*Math.PI,0.85*Math.PI);
+   ctx.stroke();
+ }
+ ctx.restore();
+
+ /* Straßen */
+ for(const r of roads){
+  ctx.fillStyle="#555";
+  ctx.fillRect(r.x-camera.x,r.y-camera.y,r.w,r.h);
+  ctx.strokeStyle="#ddd";ctx.lineWidth=3;ctx.setLineDash([20,18]);
+  ctx.beginPath();
+  if(r.w>r.h){
+   ctx.moveTo(r.x-camera.x,r.y+r.h/2-camera.y);
+   ctx.lineTo(r.x+r.w-camera.x,r.y+r.h/2-camera.y);
+  }else{
+   ctx.moveTo(r.x+r.w/2-camera.x,r.y-camera.y);
+   ctx.lineTo(r.x+r.w/2-camera.x,r.y+r.h-camera.y);
+  }
+  ctx.stroke();ctx.setLineDash([]);
+ }
+
+ /* See */
+ ctx.save();
+ ctx.fillStyle="#3da9d8";
+ ctx.strokeStyle="#176d96";
+ ctx.lineWidth=8;
+ ctx.beginPath();
+ ctx.ellipse(lake.x-camera.x,lake.y-camera.y,lake.rx,lake.ry,0,0,Math.PI*2);
+ ctx.fill();
+ ctx.stroke();
+ ctx.fillStyle="rgba(255,255,255,.55)";
+ ctx.font="bold 26px Arial";
+ ctx.fillText("SEE",lake.x-28-camera.x,lake.y+8-camera.y);
+ ctx.font="22px Arial";
+ ctx.fillText("🎣",lake.x-12-camera.x,lake.y-35-camera.y);
+ ctx.restore();
+
+
+ /* See-Hinweis */
+ if(Math.hypot(player.x-2860,player.y-520)<520){
+   ctx.fillStyle="rgba(0,0,0,.55)";
+   ctx.fillRect(2860-camera.x-105,520-camera.y-185,210,34);
+   ctx.fillStyle="#fff";
+   ctx.font="bold 17px Arial";
+   ctx.fillText("🎣 SEE – E zum Angeln",2860-camera.x-91,520-camera.y-162);
+ }
+
+ /* Weizenfeld beim Hof */
+ {
+   const fx=30-camera.x, fy=1220-camera.y, fw=220, fh=165;
+   ctx.fillStyle="#b99a52";
+   ctx.fillRect(fx,fy,fw,fh);
+   ctx.strokeStyle="#8a6b32";
+   ctx.lineWidth=4;
+   ctx.strokeRect(fx,fy,fw,fh);
+   if(!wheatHarvested){
+     ctx.strokeStyle="#e5c85c";
+     ctx.lineWidth=3;
+     for(let x=48;x<235;x+=18){
+       for(let y=1240;y<1365;y+=22){
+         ctx.beginPath();
+         ctx.moveTo(x-camera.x,y-camera.y+8);
+         ctx.lineTo(x+3-camera.x,y-camera.y-7);
+         ctx.stroke();
+       }
+     }
+     ctx.fillStyle="#fff";ctx.font="bold 15px Arial";
+     ctx.fillText("🌾 WEIZENFELD",55-camera.x,1208-camera.y);
+     if(Math.hypot(player.x-140,player.y-1305)<130){
+       ctx.fillStyle="rgba(0,0,0,.78)";
+       ctx.fillRect(25-camera.x,1395-camera.y,230,30);
+       ctx.fillStyle="#fff";ctx.font="bold 14px Arial";
+       ctx.fillText("E – Weizen ernten",75-camera.x,1416-camera.y);
+     }
+   }else{
+     ctx.fillStyle="#7f6a3b";
+     for(let x=45;x<235;x+=18){
+       ctx.fillRect(x-camera.x,1335-camera.y,10,4);
+     }
+     ctx.fillStyle="#fff";ctx.font="bold 15px Arial";
+     ctx.fillText("🌾 ABGEERNTET",62-camera.x,1208-camera.y);
+   }
+ }
+
+ /* Minispiel-Gebäude */
+ for(const b of buildings){
+  if(!b.miniGame) continue;
+  const bx=b.x-camera.x, by=b.y-camera.y;
+  ctx.fillStyle="#c89562";ctx.fillRect(bx,by,b.w,b.h);
+  ctx.fillStyle="#8e4d35";ctx.beginPath();
+  ctx.moveTo(bx,by);ctx.lineTo(bx+b.w/2,by-42);ctx.lineTo(bx+b.w,by);ctx.closePath();ctx.fill();
+  ctx.fillStyle="#fff";ctx.font="bold 15px Arial";ctx.textAlign="center";
+  ctx.fillText((b.icon||"")+" "+(b.n||b.name||""),bx+b.w/2,by+30);
+  ctx.font="12px Arial";ctx.fillText(b.miniGame==="angeln"?"E – Angeln":"E – Minispiel",bx+b.w/2,by+52);ctx.textAlign="left";
+ }
+
+
+ /* Autohändler – eigene, deutlich sichtbare Ebene */
+ {
+   const npc=carSeller;
+   const sx=npc.pos.x-camera.x, sy=npc.pos.y-camera.y;
+   const near=Math.hypot(player.x-npc.pos.x,player.y-npc.pos.y)<120;
+   ctx.fillStyle="rgba(0,0,0,.35)";
+   ctx.beginPath();ctx.ellipse(sx,sy+25,30,9,0,0,Math.PI*2);ctx.fill();
+   // Verkaufsstand
+   ctx.fillStyle="#315d7a";ctx.fillRect(sx-34,sy+5,68,22);
+   ctx.fillStyle="#7ec8ee";ctx.fillRect(sx-39,sy-2,78,8);
+   // Verkäufer
+   ctx.fillStyle="#315d7a";ctx.beginPath();ctx.arc(sx,sy-13,21,0,Math.PI*2);ctx.fill();
+   ctx.fillStyle="#f2c29b";ctx.beginPath();ctx.arc(sx,sy-37,13,0,Math.PI*2);ctx.fill();
+   // Schild
+   ctx.fillStyle="#fff";ctx.fillRect(sx-52,sy-91,104,29);
+   ctx.strokeStyle="#21445b";ctx.lineWidth=3;ctx.strokeRect(sx-52,sy-91,104,29);
+   ctx.fillStyle="#21445b";ctx.font="bold 16px Arial";ctx.textAlign="center";
+   ctx.fillText("🚗 AUTOS",sx,sy-71);ctx.textAlign="left";
+   ctx.fillStyle="#fff";ctx.font="bold 14px Arial";ctx.fillText("Ben – Autohändler",sx-66,sy-61);
+   if(near&&!carDealerOpen&&!shopOpen&&!dialogOpen){
+     ctx.fillStyle="rgba(0,0,0,.78)";ctx.fillRect(sx-78,sy+34,156,27);
+     ctx.fillStyle="#fff";ctx.font="13px Arial";ctx.textAlign="center";
+     ctx.fillText("E – Autos ansehen",sx,sy+53);ctx.textAlign="left";
+   }
+ }
+
+ /* Gekauftes Auto: sichtbar direkt beim Spieler und fährt mit ihm mit. */
+ if(ownedCar){
+   const c=carData[ownedCar];
+   const cx=player.x-camera.x, cy=player.y-camera.y;
+   const moving=(keys["w"]||keys["a"]||keys["s"]||keys["d"]||keys["arrowup"]||keys["arrowdown"]||keys["arrowleft"]||keys["arrowright"]);
+   const bob=moving ? Math.sin(performance.now()/70)*1.2 : 0;
+   ctx.save();ctx.translate(cx,cy+18+bob);
+   ctx.fillStyle="rgba(0,0,0,.35)";ctx.fillRect(-25,11,50,8);
+   ctx.fillStyle=c.typeColor||"#2f78c4";ctx.fillRect(-27,-12,54,24);
+   ctx.fillStyle="#bfe8ff";ctx.fillRect(-16,-16,13,7);ctx.fillRect(3,-16,13,7);
+   ctx.fillStyle="#222";ctx.fillRect(-20,-17,10,6);ctx.fillRect(10,-17,10,6);ctx.fillRect(-20,11,10,6);ctx.fillRect(10,11,10,6);
+   ctx.fillStyle="#fff3a8";ctx.fillRect(23,-6,4,5);ctx.fillRect(23,1,4,5);
+   ctx.restore();
+   ctx.fillStyle="#fff";ctx.font="bold 12px Arial";ctx.textAlign="center";
+   ctx.fillText(c.name,cx,cy+53);ctx.textAlign="left";
+ }
+
+ /* NPC-Autos – immer auf Straßen */
+ for(const car of npcCars){
+   const p=getCarPose(car);
+   const cx=p.x-camera.x, cy=p.y-camera.y;
+   ctx.save();
+   ctx.translate(cx,cy);
+   ctx.rotate(p.angle);
+   // Schatten
+   ctx.fillStyle="rgba(0,0,0,.28)";
+   ctx.fillRect(-20,9,40,7);
+   // Karosserie
+   ctx.fillStyle=car.color;
+   ctx.fillRect(-22,-10,44,20);
+   ctx.fillStyle="#222";
+   ctx.fillRect(-14,-14,28,7);
+   ctx.fillStyle="#bfe8ff";
+   ctx.fillRect(-11,-12,10,5);
+   ctx.fillRect(2,-12,9,5);
+   // Räder
+   ctx.fillStyle="#222";
+   ctx.fillRect(-16,-14,8,5);ctx.fillRect(8,-14,8,5);
+   ctx.fillRect(-16,9,8,5);ctx.fillRect(8,9,8,5);
+   // Licht
+   ctx.fillStyle="#fff3a8";ctx.fillRect(19,-6,3,5);ctx.fillRect(19,1,3,5);
+   ctx.restore();
+   // Fahrername klein über dem Auto
+   ctx.fillStyle="rgba(255,255,255,.9)";
+   ctx.font="10px Arial";ctx.textAlign="center";
+   ctx.fillText(car.name,cx,cy-18);
+   ctx.textAlign="left";
+ }
+
+ /* Gebäude */
+ for(const b of buildings){
+  if(b.miniGame) continue;
+  ctx.fillStyle=b.n==="Markt"?"#d4a34f":"#c89562";
+  ctx.fillRect(b.x-camera.x,b.y-camera.y,b.w,b.h);
+
+  ctx.fillStyle="#8e4d35";
+  ctx.beginPath();
+  ctx.moveTo(b.x-camera.x,b.y-camera.y);
+  ctx.lineTo(b.x+b.w/2-camera.x,b.y-45-camera.y);
+  ctx.lineTo(b.x+b.w-camera.x,b.y-camera.y);
+  ctx.closePath();ctx.fill();
+
+  ctx.fillStyle="#fff";ctx.font="16px Arial";
+  ctx.fillText(b.n,b.x+12-camera.x,b.y+28-camera.y);
+
+  if(b.n==="Markt"){
+   ctx.fillText("🏪 SHOP",b.x+b.w/2-35-camera.x,b.y+b.h/2-camera.y);
+  }
+ }
+
+ /* Eigenes Haus */
+ if(ownedHouse){
+   const h=houseData[ownedHouse];
+   const b=buildings.find(b=>b.owned);
+   if(b){
+     ctx.fillStyle="rgba(255,215,0,.9)";
+     ctx.font="bold 18px Arial";
+     ctx.fillText("🏠 MEIN HAUS",b.x-camera.x,b.y-12-camera.y);
+   }
+ }
+
+ /* Bäume */
+ for(const t of trees){
+  ctx.fillStyle="#70452c";
+  ctx.fillRect(t.x-5-camera.x,t.y+8-camera.y,10,20);
+  ctx.fillStyle="#246b35";
+  ctx.beginPath();ctx.arc(t.x-camera.x,t.y-camera.y,t.r,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle="#328542";
+  ctx.beginPath();ctx.arc(t.x-5-camera.x,t.y-5-camera.y,t.r*.65,0,Math.PI*2);ctx.fill();
+ }
+
+ /* Kristalle */
+ for(const c of crystalObjects){
+  if(c.collected)continue;
+  ctx.fillStyle="#53d8ff";
+  ctx.beginPath();
+  ctx.moveTo(c.x-camera.x,c.y-20-camera.y);
+  ctx.lineTo(c.x+13-camera.x,c.y-camera.y);
+  ctx.lineTo(c.x-camera.x,c.y+20-camera.y);
+  ctx.lineTo(c.x-13-camera.x,c.y-camera.y);
+  ctx.closePath();ctx.fill();
+ }
+
+ /* Schrein */
+ ctx.fillStyle="#777";
+ ctx.fillRect(shrine.x-camera.x,shrine.y-camera.y,shrine.w,shrine.h);
+ ctx.fillStyle="#d8c58a";
+ ctx.fillRect(shrine.x+25-camera.x,shrine.y+35-camera.y,100,90);
+ ctx.fillStyle="#fff";ctx.font="15px Arial";
+ ctx.fillText("ALTER SCHREIN",shrine.x+12-camera.x,shrine.y+20-camera.y);
+
+
+/* NPCs */
+ for(const npc of npcData){
+  const near=Math.hypot(player.x-npc.pos.x,player.y-npc.pos.y)<90;
+
+  ctx.fillStyle="rgba(0,0,0,.35)";
+  ctx.beginPath();
+  ctx.ellipse(npc.pos.x-camera.x,npc.pos.y+18-camera.y,16,6,0,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle=npc.color;
+  ctx.beginPath();
+  ctx.arc(npc.pos.x-camera.x,npc.pos.y-camera.y,15,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle="#f2c29b";
+  ctx.beginPath();
+  ctx.arc(npc.pos.x-camera.x,npc.pos.y-17-camera.y,10,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle="#fff";
+  ctx.font="13px Arial";
+  ctx.fillText(npc.name,npc.pos.x-35-camera.x,npc.pos.y-32-camera.y);
+
+  const sleeping=isNight() && npc.id!=="turmwart";
+
+  if(npc.id!=="immobilien" && !questCompleted(npc) && !sleeping){
+   ctx.fillStyle=questReady(npc)?"#ffd43b":"#fff";
+   ctx.font="20px Arial";
+   ctx.fillText("!",npc.pos.x-4-camera.x,npc.pos.y-43-camera.y);
+  }
+
+  if(sleeping){
+   ctx.fillStyle="#dff3ff";
+   ctx.font="bold 18px Arial";
+   ctx.fillText("Zzz",npc.pos.x+18-camera.x,npc.pos.y-34-camera.y);
+  }
+
+  if(near&&!shopOpen&&!dialogOpen&&!sleeping){
+   ctx.fillStyle="rgba(0,0,0,.75)";
+   ctx.fillRect(npc.pos.x-75-camera.x,npc.pos.y+28-camera.y,150,27);
+   ctx.fillStyle="#fff";ctx.font="13px Arial";
+   ctx.fillText(npc.id==="immobilien" ? "E – Häuser ansehen" : "E – sprechen",npc.pos.x-58-camera.x,npc.pos.y+47-camera.y);
+  }
+ }
+
+ /* Immobilienverkäufer – eigene, deutlich sichtbare Ebene */
+ {
+   const npc=estateSeller;
+   const sx=npc.pos.x-camera.x, sy=npc.pos.y-camera.y;
+   const near=Math.hypot(player.x-npc.pos.x,player.y-npc.pos.y)<110;
+
+   // großer Schatten
+   ctx.fillStyle="rgba(0,0,0,.35)";
+   ctx.beginPath();
+   ctx.ellipse(sx,sy+24,28,9,0,0,Math.PI*2);
+   ctx.fill();
+
+   // auffälliger Verkaufsstand
+   ctx.fillStyle="#8b5a2b";
+   ctx.fillRect(sx-30,sy+5,60,20);
+   ctx.fillStyle="#f4d35e";
+   ctx.fillRect(sx-34,sy-1,68,8);
+
+   // Verkäufer-Körper
+   ctx.fillStyle="#8b5a2b";
+   ctx.beginPath();
+   ctx.arc(sx,sy-12,20,0,Math.PI*2);
+   ctx.fill();
+
+   // Kopf
+   ctx.fillStyle="#f2c29b";
+   ctx.beginPath();
+   ctx.arc(sx,sy-36,13,0,Math.PI*2);
+   ctx.fill();
+
+   // Hut
+   ctx.fillStyle="#5b3a29";
+   ctx.fillRect(sx-16,sy-51,32,7);
+   ctx.fillRect(sx-11,sy-58,22,9);
+
+   // großes Haus-Schild
+   ctx.fillStyle="#fff";
+   ctx.fillRect(sx-48,sy-92,96,28);
+   ctx.strokeStyle="#5b3a29";
+   ctx.lineWidth=3;
+   ctx.strokeRect(sx-48,sy-92,96,28);
+   ctx.fillStyle="#5b3a29";
+   ctx.font="bold 16px Arial";
+   ctx.textAlign="center";
+   ctx.fillText("🏠 IMMOBILIEN",sx,sy-72);
+   ctx.textAlign="left";
+
+   // Name
+   ctx.fillStyle="#fff";
+   ctx.font="bold 14px Arial";
+   ctx.fillText("Max – Immobilien",sx-62,sy-63);
+
+   if(near&&!shopOpen&&!dialogOpen){
+     ctx.fillStyle="rgba(0,0,0,.88)";
+     ctx.fillRect(sx-105,sy+35,210,31);
+     ctx.fillStyle="#fff";
+     ctx.font="bold 14px Arial";
+     ctx.textAlign="center";
+     ctx.fillText("E – Häuser ansehen",sx,sy+56);
+     ctx.textAlign="left";
+   }
+ }
+
+ if(!questState.fischer && caughtFish<1){
+  const d=distanceToLake();
+  if(d<360){
+   const msg=d<300 ? "🎣 E – Angel-Minispiel starten" : `🎣 See: ${Math.round(d)} m entfernt`;
+   ctx.fillStyle="rgba(0,45,70,.86)";
+   ctx.fillRect(player.x-125-camera.x,player.y-78-camera.y,250,30);
+   ctx.fillStyle="#fff";ctx.font="bold 14px Arial";
+   ctx.fillText(msg,player.x-110-camera.x,player.y-57-camera.y);
+  }
+ }
+
+ // Nachtwache-Kontrollpunkte: erst sichtbar, nachdem Erik nachts angesprochen wurde.
+ if(isNight() && nightPatrolVisible){
+   for(let i=0;i<nightPatrolPoints.length;i++){
+     const p=nightPatrolPoints[i];
+     const px=p.x-camera.x, py=p.y-camera.y;
+     const done=nightPatrolChecked[i];
+     ctx.fillStyle=done?"rgba(70,190,90,.22)":"rgba(255,210,40,.22)";
+     ctx.beginPath();
+     ctx.arc(px,py,34,0,Math.PI*2);
+     ctx.fill();
+     ctx.strokeStyle=done?"#55d66b":"#ffd43b";
+     ctx.lineWidth=4;
+     ctx.beginPath();
+     ctx.arc(px,py,25,0,Math.PI*2);
+     ctx.stroke();
+     ctx.fillStyle="#fff";
+     ctx.font="bold 24px Arial";
+     ctx.textAlign="center";
+     ctx.fillText(done?"✓":"!",px,py+8);
+     ctx.font="bold 13px Arial";
+     ctx.fillStyle="#fff";
+     ctx.fillText(p.label,px,py-40);
+     ctx.textAlign="left";
+   }
+ }
+
+ /* Anderer Online-Spieler */
+ drawRemotePlayers();
+
+ /* Spieler */
+ ctx.fillStyle="#2454d6";
+ ctx.beginPath();
+ ctx.arc(player.x-camera.x,player.y-camera.y,player.r,0,Math.PI*2);
+ ctx.fill();
+
+ ctx.fillStyle="#fff";ctx.font="12px Arial";
+ ctx.fillText("Du",player.x-10-camera.x,player.y-22-camera.y);
+
+ if(distanceToMarket()<180&&!shopOpen&&!dialogOpen){
+  ctx.fillStyle="rgba(0,0,0,.75)";
+  ctx.fillRect(player.x-95-camera.x,player.y-65-camera.y,190,30);
+  ctx.fillStyle="#fff";ctx.font="14px Arial";
+  ctx.fillText("E – Laden öffnen",player.x-65-camera.x,player.y-44-camera.y);
+ }
+
+ // Nacht-Overlay
+ if(isNight()){
+  ctx.fillStyle="rgba(0,0,0,.48)";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+ }
+
+ // Hinweis am eigenen Haus
+ if(isNight() && ownedHouseBuilding() && distanceToOwnedHouse()<280 && !shopOpen && !dialogOpen){
+  const b=ownedHouseBuilding();
+  ctx.fillStyle="rgba(0,0,0,.78)";
+  ctx.fillRect(b.x-camera.x+b.w/2-120,b.y-camera.y-42,240,32);
+  ctx.fillStyle="#fff";
+  ctx.font="bold 14px Arial";
+  ctx.fillText("🌙 E – Nacht überspringen",b.x-camera.x+b.w/2-98,b.y-camera.y-20);
+ }
+}
+
+function openFishing(){
+  if(!fishingQuestActive()) return;
+  fishingTargetType="normal";
+  fishingOpen=true;
+  document.getElementById("fishingGame").style.display="flex";
+  fishGame.x=5+Math.random()*65;
+  fishGame.target=10+Math.random()*65;
+  const target=document.getElementById("fishTarget");
+  if(target) target.style.background = "#55b85a";
+  const label="Fisch";
+  document.getElementById("fishStatus").textContent=`🎣 Fange den ${label} Fisch!`;
+}
+function closeFishing(){
+  fishingOpen=false;
+  document.getElementById("fishingGame").style.display="none";
+}
+function fishTry(){
+  if(!fishingOpen)return;
+  const x=fishGame.x;
+  const t=fishGame.target;
+  if(x>=t-5 && x<=t+22){
+    caughtFish=1;
+    caughtFishType=fishingTargetType;
+    const label="🐟 Fisch";
+    document.getElementById("fishStatus").textContent=`${label} gefangen! Bring ihn zu Fischer Tom.`;
+    setTimeout(closeFishing,700);
+    updateQuestHUD();
+  }else{
+    document.getElementById("fishStatus").textContent="💦 Daneben! Versuch es noch einmal.";
+    fishGame.target=10+Math.random()*65;
+  }
+}
+function updateFishing(){
+  if(!fishingOpen)return;
+  fishGame.x += fishGame.dir*1.2;
+  if(fishGame.x>92){fishGame.x=92;fishGame.dir=-1;}
+  if(fishGame.x<3){fishGame.x=3;fishGame.dir=1;}
+  const cursor=document.getElementById("fishCursor");
+  const target=document.getElementById("fishTarget");
+  if(cursor)cursor.style.top=fishGame.x+"%";
+  if(target)target.style.top=fishGame.target+"%";
+}
+
+function drawMinimap(){
+ const m=document.getElementById("minimapCanvas");
+ if(m) m.style.display=inCity?"none":"block";
+ if(!m)return;
+ const mc=m.getContext("2d");
+ const sx=m.width/WORLD_W, sy=m.height/WORLD_H;
+ mc.clearRect(0,0,m.width,m.height);
+ mc.fillStyle="#78b85a";mc.fillRect(0,0,m.width,m.height);
+
+ // Straßen
+ mc.fillStyle="#777";
+ for(const r of roads) mc.fillRect(r.x*sx,r.y*sy,Math.max(1,r.w*sx),Math.max(1,r.h*sy));
+
+ // See
+ mc.fillStyle="#2d9fd0";
+ mc.strokeStyle="#075b80";mc.lineWidth=2;
+ mc.beginPath();mc.ellipse(lake.x*sx,lake.y*sy,lake.rx*sx,lake.ry*sy,0,0,Math.PI*2);mc.fill();mc.stroke();
+
+ // Autohändler auf der Minimap
+ mc.fillStyle="#315d7a";
+ mc.beginPath();mc.arc(carSeller.pos.x*sx,carSeller.pos.y*sy,6,0,Math.PI*2);mc.fill();
+ mc.strokeStyle="#fff"; mc.lineWidth=2; mc.stroke();
+
+ // Immobilien-Verkäufer auf der Minimap
+ mc.fillStyle="#8b5a2b";
+ mc.beginPath();
+ mc.arc(estateSeller.pos.x*sx,estateSeller.pos.y*sy,6,0,Math.PI*2);
+ mc.fill();
+ mc.strokeStyle="#fff"; mc.lineWidth=2; mc.stroke();
+
+ // Wichtige Gebäude / NPCs
+ for(const npc of [...npcData,estateSeller]){
+  mc.fillStyle=npc.id==="fischer"?"#d33":"#ffd43b";
+  mc.beginPath();mc.arc(npc.pos.x*sx,npc.pos.y*sy,npc.id==="fischer"?4:2.5,0,Math.PI*2);mc.fill();
+ }
+
+ // Eigenes Haus
+ if(ownedHouse){
+   const h=houseData[ownedHouse];
+   mc.fillStyle="#ffd43b";
+   mc.fillRect(h.x*sx,h.y*sy,Math.max(3,h.w*sx),Math.max(3,h.h*sy));
+ }
+
+ // Route zum See
+ if(!questState.fischer && caughtFish<1){
+  mc.strokeStyle="#fff";mc.lineWidth=1.5;mc.setLineDash([4,3]);
+  mc.beginPath();mc.moveTo(player.x*sx,player.y*sy);mc.lineTo(lake.x*sx,lake.y*sy);mc.stroke();mc.setLineDash([]);
+ }
+
+ // Spieler
+ mc.fillStyle="#2454d6";mc.beginPath();mc.arc(player.x*sx,player.y*sy,4,0,Math.PI*2);mc.fill();
+ mc.strokeStyle="#fff";mc.lineWidth=1;mc.stroke();
+
+ mc.fillStyle="#fff";mc.font="bold 11px Arial";mc.fillText("N",5,12);
+}
+
+function updateLakeHint(){
+ const h=document.getElementById("lakeHint");
+ if(!h)return;
+ if(fishingQuestActive()){
+  const d=Math.round(distanceToLake());
+  h.style.display="block";
+  h.textContent=d<420 ? "🎣 Du bist am See – drücke E für das Angel-Minispiel" : `🎣 See: ${d} m · Folge der gestrichelten Linie auf der Minimap`;
+ }else{h.style.display="none";}
+}
+
+let gameStarted=false;
+
+function startGame(){
+  if(gameStarted)return;
+  gameStarted=true;
+  connectMultiplayer();
+  const screen=document.getElementById("startScreen");
+  if(screen)screen.style.display="none";
+  updateHUD();
+  requestAnimationFrame(loop);
+}
+
+function loop(){
+  if(!gameStarted)return;
+  updateFishing();
+  updateMiniGame();
+  updateNPCCars();
+  updateCityCars();
+ movePlayer();
+ sendPlayerState();
+ collectCrystals();
+ updateCamera();
+ draw();
+ drawMinimap();
+ updateLakeHint();
+ updateHUD();
+ requestAnimationFrame(loop);
+}
+
+document.getElementById("startGameButton").addEventListener("click",startGame);
+</script>
+
+<div id="miniGame" style="display:none;position:fixed;inset:0;z-index:60;align-items:center;justify-content:center;background:rgba(0,0,0,.78);">
+  <div style="width:min(560px,92vw);background:#f7f1df;border:5px solid #6b7f3b;border-radius:18px;padding:24px;text-align:center;color:#17242b;box-shadow:0 15px 50px rgba(0,0,0,.45);">
+    <h2 id="miniGameTitle">🎮 Minispiel</h2>
+    <div id="woodScene" style="display:none;position:relative;height:125px;margin:4px 0 10px;background:linear-gradient(#dcefcf,#b8d99f);border-radius:14px;border:3px solid #6b7f3b;overflow:hidden;">
+      <div id="woodBlock" style="position:absolute;left:50%;top:43px;transform:translateX(-50%);font-size:64px;line-height:1;">🪵</div>
+      <div id="axeSwing" style="position:absolute;left:20%;top:20px;transform:translateX(-50%) rotate(-35deg);font-size:54px;line-height:1;transform-origin:70% 85%;transition:left .03s linear;">🪓</div>
+    </div>
+    <div id="wheatScene" style="display:none;position:relative;height:125px;margin:4px 0 10px;background:linear-gradient(#9ed36a,#6da747);border-radius:14px;border:3px solid #6b7f3b;overflow:hidden;">
+      <div style="position:absolute;inset:18px 12px;display:flex;justify-content:space-around;align-items:flex-end;font-size:48px;line-height:1;">🌾🌾🌾🌾🌾🌾🌾</div>
+      <div id="wheatTargetCrop" style="position:absolute;left:50%;top:34px;transform:translateX(-50%);font-size:68px;line-height:1;">🌾</div>
+      <div id="hoeSwing" style="position:absolute;left:20%;top:15px;transform:translateX(-50%) rotate(-35deg);font-size:54px;line-height:1;transform-origin:70% 85%;transition:left .03s linear;">⛏️</div>
+    </div>
+    <div id="axeHint" style="font-weight:bold;min-height:24px;margin-bottom:8px;"></div>
+    <div id="miniGameBar" style="position:relative;height:42px;background:#333;border-radius:20px;overflow:hidden;margin:25px 0;">
+      <div id="miniGameTarget" style="position:absolute;top:0;height:100%;width:22%;background:#55b85a;"></div>
+      <div id="miniGameCursor" style="position:absolute;top:4px;width:8px;height:34px;background:#fff;border-radius:5px;"></div>
+    </div>
+    <div id="miniGameStatus" style="font-weight:bold;margin:12px;min-height:46px;">Bereit!</div>
+    <button id="miniActionButton" onclick="miniGameAction()" style="font-size:20px;padding:12px 28px;border:0;border-radius:12px;background:#6b7f3b;color:white;cursor:pointer;">🪓 ZERSCHLAGEN</button>
+    <button onclick="closeMiniGame()" style="margin-left:10px;padding:10px 18px;border-radius:10px;border:0;cursor:pointer;">Abbrechen</button>
+  </div>
+</div>
+
+<div id="fishingGame" style="display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;background:rgba(0,20,35,.78);">
+  <div style="width:min(340px,88vw);min-height:560px;background:linear-gradient(#f7f1df,#e7f1f4);border:5px solid #2b607f;border-radius:22px;padding:22px 18px;text-align:center;color:#17242b;box-shadow:0 15px 50px rgba(0,0,0,.45);display:flex;flex-direction:column;justify-content:space-between;">
+    <div style="font-size:48px;line-height:1;margin-top:4px;">🎣</div>
+    <h2 style="margin:8px 0 4px;">Angel-Minispiel</h2>
+    <p style="margin:6px 0 12px;">Drücke <b>LEERTASTE</b> oder den Button, wenn der Fisch im grünen Bereich ist!</p>
+    <div style="position:relative;width:54px;height:300px;background:#333;border-radius:27px;overflow:hidden;margin:20px auto;border:3px solid #2b607f;">
+      <div id="fishTarget" style="position:absolute;left:0;top:10%;height:22%;width:100%;background:#55b85a;"></div>
+      <div id="fishCursor" style="position:absolute;left:8px;top:5%;width:32px;height:8px;background:#fff;border-radius:5px;box-shadow:0 0 4px rgba(255,255,255,.8);"></div>
+    </div>
+    <div id="fishStatus" style="font-weight:bold;margin:12px;">🎣 Warte auf den richtigen Moment...</div>
+    <button onclick="fishTry()" style="font-size:20px;padding:12px 28px;border:0;border-radius:12px;background:#2b7da0;color:white;cursor:pointer;">🎣 FISCH FANGEN</button>
+    <button onclick="closeFishing()" style="margin-left:10px;padding:10px 18px;border-radius:10px;border:0;cursor:pointer;">Abbrechen</button>
+  </div>
+</div>
+
+</body>
+</html>
